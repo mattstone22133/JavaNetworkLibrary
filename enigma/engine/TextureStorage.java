@@ -4,6 +4,7 @@ import java.util.ArrayList;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 
 /**
  * This class is a container class for all textures stored in ram. The initTextures() method call
@@ -21,8 +22,9 @@ public class TextureStorage {
 
 	private static ArrayList<Texture> allTextures = new ArrayList<Texture>();
 	public static Texture genericSpriteTexture;
-	public static Texture kButtonPressed;
-	public static Texture lambdaTexture;
+	public static Texture buttonPressed;
+	public static Texture button;
+	public static BitmapFont bmFont;
 
 	public static void initTextures() {
 		// check if textures have already been initialized
@@ -32,11 +34,24 @@ public class TextureStorage {
 
 		genericSpriteTexture = new Texture(Gdx.files.internal("GenericActorSprite.png"));
 		allTextures.add(genericSpriteTexture);
+		
+		button = new Texture(Gdx.files.internal("ButtonBlack.png"));
+		allTextures.add(genericSpriteTexture);
+		
+		buttonPressed = new Texture(Gdx.files.internal("ButtonGrey.png"));
+		allTextures.add(genericSpriteTexture);
+		
+		bmFont = new BitmapFont(Gdx.files.internal("prada.fnt"));
+
 	}
 
 	public static void dispose() {
 		for (Texture tex : allTextures) {
 			tex.dispose();
+		}
+		
+		if(bmFont != null){
+			bmFont.dispose();
 		}
 	}
 }
