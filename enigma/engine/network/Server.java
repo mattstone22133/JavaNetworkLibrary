@@ -1,4 +1,4 @@
-package enigma.engine;
+package enigma.engine.network;
 
 /**
  * This class handles the server aspect of the application.

@@ -1,4 +1,4 @@
-package enigma.engine;
+package enigma.engine.network;
 
 /**
  * This class wraps the network behavior for the API.
