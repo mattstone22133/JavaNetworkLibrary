@@ -24,6 +24,13 @@ public class TextureStorage {
 	public static Texture genericSpriteTexture;
 	public static Texture buttonPressed;
 	public static Texture button;
+	public static Texture selected_small;
+	public static Texture unselected_small;
+	public static Texture selected;
+	public static Texture unselected;
+
+	public static Texture menuBG;
+	public static Texture test;
 	public static BitmapFont bmFont;
 
 	public static void initTextures() {
@@ -41,8 +48,26 @@ public class TextureStorage {
 		buttonPressed = new Texture(Gdx.files.internal("ButtonGrey.png"));
 		allTextures.add(genericSpriteTexture);
 		
-		bmFont = new BitmapFont(Gdx.files.internal("prada.fnt"));
+		menuBG = new Texture(Gdx.files.internal("DarkMenu.png"));
+		allTextures.add(menuBG);
 
+		selected_small = new Texture(Gdx.files.internal("select_color.png"));
+		allTextures.add(selected_small);
+		
+		unselected_small = new Texture(Gdx.files.internal("unselect_color.png"));
+		allTextures.add(unselected_small);
+		
+		selected = new Texture(Gdx.files.internal("select400x400.png"));
+		allTextures.add(selected);
+		
+		unselected = new Texture(Gdx.files.internal("unselect400x400.png"));
+		allTextures.add(unselected);
+		
+		test = new Texture(Gdx.files.internal("select2.png"));
+		allTextures.add(test);
+		
+		bmFont = new BitmapFont(Gdx.files.internal("prada.fnt"));
+		
 	}
 
 	public static void dispose() {

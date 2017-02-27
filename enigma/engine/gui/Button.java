@@ -1,9 +1,12 @@
-package enigma.engine;
+package enigma.engine.gui;
 
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.math.Vector3;
 
-public class Button {
+import enigma.engine.TextureStorage;
+
+public class Button implements UIObject {
 	private Sprite button;
 	private boolean shouldHide = false;
 	private long delayToStartDraw = 1000;
@@ -84,10 +87,56 @@ public class Button {
 		return !shouldHide && timeDelayedEnough();
 	}
 
-	public void translate(float x, int y) {
-		//translate the button background
+	public void translate(float x, float y) {
+		// translate the button background
 		button.translate(x, y);
+
+		// translate the drawable string
+	}
+
+	@Override
+	public void setPosition(float x, float y) {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	public float getX() {
+		return button.getX();
+	}
+
+	@Override
+	public float getY() {
+		return button.getY();
+	}
+
+	@Override
+	public boolean isTouched(Vector3 touchCoords) {
+		// TODO Auto-generated method stub
+		return false;
+	}
+
+	@Override
+	public void makeActive() {
+		// TODO Auto-generated method stub
 		
-		//translate the drawable string
+	}
+
+	@Override
+	public void makeInactive() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void activeSelctionLogic() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public String getValue() {
+		// TODO Auto-generated method stub
+		return null;
 	}
 }
