@@ -5,6 +5,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -28,6 +29,7 @@ public class Client extends Network {
 	private ConcurrentLinkedQueue<Packet> receiveBuffer = new ConcurrentLinkedQueue<Packet>();
 	
 	private boolean threadsShouldLive = true;
+	private int blockingTimeoutMS = 5000;
 	private int sendSleepDelay;
 
 	// reconnection
@@ -86,6 +88,7 @@ public class Client extends Network {
 		boolean ret = true;
 		try {
 			TCPSocket = new Socket(address, port);
+			TCPSocket.setSoTimeout(blockingTimeoutMS);
 		} catch (UnknownHostException e2) {
 			ret = false;
 			throw new FailedToConnect();
@@ -117,6 +120,8 @@ public class Client extends Network {
 			} catch (ClassNotFoundException e){
 				e.printStackTrace();
 				return;
+			} catch (SocketTimeoutException e){
+				//Do nothing, but prevent this from being caught in IOException
 			} catch (IOException e) {
 				receiveFailures++;
 				if(receiveFailures > receiveFailureThreshold){
