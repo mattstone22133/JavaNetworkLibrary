@@ -61,14 +61,15 @@ public class Client extends Network {
 
 		//start up sending thread @formatter:off
 		sendingThread =  new Thread(new Runnable(){public void run(){sendingThreadMethod();}});
+		sendingThread.start();
 			
 		//start up receiving thread
 		receivingThread =  new Thread(new Runnable(){public void run(){receivingThreadMethod();}});
+		receivingThread.start();
 
 		//connection successful, update these fields @formatter:on
 		this.address = address;
 		this.port = port;
-
 	}
 
 	private boolean setupStreams() {
@@ -237,10 +238,10 @@ public class Client extends Network {
 			System.out.println("Could not connect");
 			return;
 		}
-		TestPacket test = new TestPacket(12, 0, 0, 45);
+		DemoConcretePacket test = new DemoConcretePacket(12, 0, 0, 45);
 		while (true) {
 			try {
-				Thread.sleep(1000);
+				Thread.sleep(5000);
 				client.send(test);
 
 			} catch (InterruptedException e) {

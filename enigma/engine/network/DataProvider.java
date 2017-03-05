@@ -16,7 +16,7 @@ public class DataProvider implements Serializable {
 		x = 100 * rng.nextFloat();
 		y = 100 * rng.nextFloat();
 		rotation = 360 * rng.nextFloat();
-		System.out.printf("x:%3.2f y:%3.2f rot:%3.2f id:%d.", x, y, rotation, localID);
+		System.out.printf("randomized to: x:%3.2f y:%3.2f rot:%3.2f id:%d.\n", x, y, rotation, localID);
 	}
 
 	public void print() {

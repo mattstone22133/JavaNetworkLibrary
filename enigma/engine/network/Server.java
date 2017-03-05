@@ -5,7 +5,6 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -49,18 +48,29 @@ public class Server extends Network {
 	/** provides a storage place to lump all received packets for user processing */
 	private LinkedList<Packet> stagedPackets = new LinkedList<Packet>();
 
-	public Server() {
+	public Server(int port) {
+		this.port = port;
+		ready = true;
 
 	}
 
-	public void run() {
+	/**
+	 * Start running the server. This method is intended to be called in another thread. Throws
+	 * IOException if failure to initiate the listening socket.
+	 * 
+	 * @throws IOException failure to initiate the listening socket.
+	 */
+	public void run() throws IOException {
 		threadsShouldLive = true;
+		listener = new ServerSocket(port);
+		isRunning = true;
 		while (threadsShouldLive) {
 			if (!ready) {
 				sleepForMS(1000L);
 			} else {
 				//start a continuously listening thread //@formatter:off
 				listeningThread = new Thread(new Runnable() {public void run() {listen();}});
+				listeningThread.start();
 
 				// continually sleep until the server is to be restarted 
 				while (!closeAllThreads) {sleepForMS(1000L);}
@@ -92,30 +102,42 @@ public class Server extends Network {
 		while (threadsShouldLive) {
 			if (sockets.size() < maxPlayers - 1) {
 				try {
-					listener.setSoTimeout(1000);
+					// TODO concern: add timeout to listener so that thread may shut down?
+					listener.setSoTimeout(5000);
 					final Socket newSocket = listener.accept();
+
 					newSocket.setSoTimeout(blockingTimeoutMS);
 
-					// save socket ref into hashmap
+					// save socket reference into hashmap
 					sockets.put(newSocket.hashCode(), newSocket);
+
+					// init streams
+					inStreams.put(newSocket, new ObjectInputStream(newSocket.getInputStream()));
+					outStreams.put(newSocket, new ObjectOutputStream(newSocket.getOutputStream()));
+
+					// init buffers
 					sendBuffer.put(newSocket, new ConcurrentLinkedQueue<Packet>());
 					receiveBuffers.put(newSocket, new ConcurrentLinkedQueue<Packet>());
+
+					// init failure counts
 					sendFailures.put(newSocket, 0);
 					receiveFailures.put(newSocket, 0);
 
 					//launch a thread to receive from this socket @formatter:off
 					Thread sendThread = new Thread(new Runnable() {public void run(){send(newSocket);}});
 					outThreads.put(newSocket, sendThread);
+					sendThread.start();
 					
 					//launch a thread to broadcast from this socket
 					Thread receiveThread = new Thread(new Runnable(){public void run(){receive(newSocket);}});
 					inThreads.put(newSocket, receiveThread);
+					receiveThread.start();
 					
 					//@formatter:on
-				} catch (SocketException e) {
+				} catch (SocketTimeoutException e) {
 					// timeout event is normal
 				} catch (IOException e) {
-					System.out.println("Failed to acept socket - IO Exception");
+					System.out.println("Failed to accept socket - IO Exception");
 					e.printStackTrace();
 				}
 			}
@@ -125,9 +147,12 @@ public class Server extends Network {
 	private void receive(Socket fromSocket) {
 		while (threadsShouldLive) {
 			try {
-				Packet inbound = (Packet) inStreams.get(fromSocket).readObject();
-				receiveBuffers.get(fromSocket).add(inbound);
-				hasReceived = true;
+				ObjectInputStream inStream = inStreams.get(fromSocket);
+				Packet inbound = (Packet) inStream.readObject();
+				if (inbound != null) {
+					receiveBuffers.get(fromSocket).add(inbound);
+					hasReceived = true;
+				}
 
 			} catch (ClassNotFoundException e) {
 				// cast error kill thread and pass exception
@@ -152,10 +177,12 @@ public class Server extends Network {
 			try {
 				// peek what is to be sent, rather than removing from queue
 				Packet toSend = sendBuffer.get(toSocket).peek();
-				outStreams.get(toSocket).writeObject(toSend);
+				if (toSend != null) {
+					outStreams.get(toSocket).writeObject(toSend);
 
-				// remove packet from buffer because exception was not thrown
-				sendBuffer.get(toSocket).poll();
+					// remove packet from buffer because exception was not thrown
+					sendBuffer.get(toSocket).poll();
+				}
 
 			} catch (IOException e) {
 				// socket should not timeout for sends unless there's a problem
@@ -230,6 +257,8 @@ public class Server extends Network {
 	 * 
 	 * If collections were to be iterated while still being updated, then sockets that were accessed
 	 * later may have newer packets than earlier accessed sockets.
+	 * 
+	 * This method will not stage more packets until
 	 */
 	public void stageReceivedPacketsForRemoval() {
 		if (stagedPackets.size() > 0) {
@@ -247,38 +276,64 @@ public class Server extends Network {
 			queueSizes.put(socket, receiveBuffers.get(socket).size());
 		}
 		// sizes recorded; only polling stage #packets of those sizes
-		for(Socket socket : keys){
-			int size =  queueSizes.get(socket);
+		for (Socket socket : keys) {
+			int size = queueSizes.get(socket);
 			ConcurrentLinkedQueue<Packet> buffer = receiveBuffers.get(socket);
-			for(int i = 0; i < size; ++i){
+			for (int i = 0; i < size; ++i) {
+				// TODO Concern : what if buffer is dumped? (nullptr).
+				// Solutions: create lock specifically for buffer dumping?
+				// OR - Maybe require dumping to dump staged packets?
 				stagedPackets.add(buffer.poll());
 			}
 		}
-
 	}
 
-	public static void main(String[] args) throws UnknownHostException {
-		final Server server = new Server();
-		server.setPort(25565);
+	public boolean hasStagedPackets() {
+		return stagedPackets.size() > 0;
+	}
 
+	public Packet getNextStagedPacket() {
+		return stagedPackets.poll();
+	}
+
+	public static void main(String[] args) throws UnknownHostException, InterruptedException {
+		final Server server = new Server(25565);
+
+		// Start the server running
 		new Thread(new Runnable() {
 			public void run() {
-				server.run();
+				System.out.println("Starting Server Up");
+				try {
+					server.run();
+				} catch (IOException e) {
+					System.out.println("Failed to start server listening for connections");
+					e.printStackTrace();
+				}
 			}
-		});
-
+		}).start();
+		
+		//Creating a delay before starting the un-packaging.
+		Thread.sleep(1000);
+			
+	
+		// Start a thread to print messages from the server (independent of this thread)
 		new Thread(new Runnable() {
 			public void run() {
+				System.out.println("Starting staging and unpackaging phases");
 				while (server.isRunning()) {
 					if (server.hasReceivedPacket()) {
 						server.stageReceivedPacketsForRemoval();
+						while (server.hasStagedPackets()) {
+							DemoConcretePacket packet = (DemoConcretePacket) server.getNextStagedPacket();
+							// here is where you would use your defined packet to extra data
+							packet.printData();
+						}
 					}
 				}
 			}
-		});
+		}).start();
 
-		server.run();
-
+		Thread.sleep(1000);
 		System.out.println("Close the server by pressing enter");
 		Scanner kb = new Scanner(System.in);
 		kb.nextLine();
