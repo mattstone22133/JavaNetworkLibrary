@@ -27,7 +27,8 @@ public class Client extends Network {
 
 	private ConcurrentLinkedQueue<Packet> queuedPackets = new ConcurrentLinkedQueue<Packet>();
 	private ConcurrentLinkedQueue<Packet> receiveBuffer = new ConcurrentLinkedQueue<Packet>();
-	
+
+
 	private boolean threadsShouldLive = true;
 	private int blockingTimeoutMS = 5000;
 	private int sendSleepDelay;
@@ -41,14 +42,14 @@ public class Client extends Network {
 	public Client() {
 	}
 
-	public void connect(String address, int port) throws FailedToConnect {
+	public void connect(String address, int dstPort) throws FailedToConnect {
+		threadsShouldLive = true;
 
 		if (TCPSocket != null && !TCPSocket.isClosed()) {
 			throw new IllegalStateException("Client: Socket Not Closed");
 		}
 
-		// Try with resources automatically closes resources if any should fail to be initialized
-		if (!connectSocket(address, port)) {
+		if (!connectSocket(address, dstPort)) {
 			throw new FailedToConnect("Could not establish socket");
 		}
 
@@ -59,17 +60,25 @@ public class Client extends Network {
 
 		System.out.println("Client: Connected to server.");
 
-		//start up sending thread @formatter:off
-		sendingThread =  new Thread(new Runnable(){public void run(){sendingThreadMethod();}});
+		// start up sending thread @formatter:off
+		sendingThread = new Thread(new Runnable() {
+			public void run() {
+				sendingThreadMethod();
+			}
+		});
 		sendingThread.start();
-			
-		//start up receiving thread
-		receivingThread =  new Thread(new Runnable(){public void run(){receivingThreadMethod();}});
+
+		// start up receiving thread
+		receivingThread = new Thread(new Runnable() {
+			public void run() {
+				receivingThreadMethod();
+			}
+		});
 		receivingThread.start();
 
-		//connection successful, update these fields @formatter:on
+		// connection successful, update these fields @formatter:on
 		this.address = address;
-		this.port = port;
+		this.port = dstPort;
 	}
 
 	private boolean setupStreams() {
@@ -117,20 +126,20 @@ public class Client extends Network {
 			try {
 				Packet inbound = (Packet) inStream.readObject();
 				receiveBuffer.add(inbound);
-				
-			} catch (ClassNotFoundException e){
+
+			} catch (ClassNotFoundException e) {
 				e.printStackTrace();
 				return;
-			} catch (SocketTimeoutException e){
-				//Do nothing, but prevent this from being caught in IOException
+			} catch (SocketTimeoutException e) {
+				// Do nothing, but prevent this from being caught in IOException
 			} catch (IOException e) {
 				receiveFailures++;
-				if(receiveFailures > receiveFailureThreshold){
+				if (receiveFailures > receiveFailureThreshold) {
 					reestablishConnection();
 					receiveFailures = 0;
 				}
 			}
-			
+
 			// pause thread
 			if (sendSleepDelay > 0) {
 				sleepThread(sendSleepDelay);
@@ -138,7 +147,6 @@ public class Client extends Network {
 		}
 	}
 
-	
 	public void sendingThreadMethod() {
 		while (threadsShouldLive) {
 			if (queuedPackets.size() > 0) {
@@ -172,7 +180,8 @@ public class Client extends Network {
 
 			TCPSocket = null;
 
-			// attempt a reconnect until user decides to disconnect (which sets threadsShouldLive)
+			// attempt a reconnect until user decides to disconnect (which sets
+			// threadsShouldLive)
 			while (threadsShouldLive && !isConnected()) {
 				try {
 					connect(address, port);
@@ -184,7 +193,8 @@ public class Client extends Network {
 
 	private void stopThreads() {
 		threadsShouldLive = false;
-		//TODO kill receive stream to interrupt with thread with IO exception, which will check threadsShouldLive
+		// TODO kill receive stream to interrupt with thread with IO exception,
+		// which will check threadsShouldLive
 		while (receivingThread != null && receivingThread.isAlive()) {
 			sleepThread(1000);
 		}
@@ -201,6 +211,8 @@ public class Client extends Network {
 	}
 
 	public void disconnect() {
+		// TODO: finish developing this
+		threadsShouldLive = false;
 		try {
 			if (TCPSocket != null) {
 				TCPSocket.close();
@@ -215,7 +227,8 @@ public class Client extends Network {
 	}
 
 	/**
-	 * Prepare a packet to be sent next. Once a packet is queued, it cannot be removed.
+	 * Prepare a packet to be sent next. Once a packet is queued, it cannot be
+	 * removed.
 	 * 
 	 * @param packet
 	 */
@@ -230,6 +243,31 @@ public class Client extends Network {
 		}
 	}
 
+	public boolean isRunning() {
+		boolean ret = false;
+
+		ret |= threadsShouldLive;
+		if (receivingThread != null) {
+			ret |= receivingThread.isAlive();
+		}
+		if (sendingThread != null) {
+			ret |= sendingThread.isAlive();
+		}
+		if (TCPSocket != null) {
+			ret |= !TCPSocket.isClosed();
+		}
+
+		return ret;
+	}
+
+	public boolean hasReceivedPacket() {
+		return receiveBuffer.size() > 0;
+	}
+	
+	public Packet getNextReceivedPacket() {
+		return receiveBuffer.poll();
+	}
+
 	public static void main(String[] args) throws UnknownHostException {
 		Client client = new Client();
 		try {
@@ -242,13 +280,12 @@ public class Client extends Network {
 		while (true) {
 			try {
 				Thread.sleep(5000);
-				client.send(test);
+				client.queueToSend(test);
 
 			} catch (InterruptedException e) {
-				e.printStackTrace();
-			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		}
 	}
+
 }
