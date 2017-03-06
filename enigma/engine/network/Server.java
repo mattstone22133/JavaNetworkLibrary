@@ -50,9 +50,12 @@ public class Server extends Network {
 	private boolean isRunning;
 	private boolean hasReceived;
 	/**
-	 * provides a storage place to lump all received packets for user processing
+	 * provides a storage place to lump all received packets for user processing.
+	 * Non-concurrency is intentional.
+	 * 
 	 */
-	private LinkedList<Packet> stagedPackets = new LinkedList<Packet>();
+	private LinkedList<Packet> stagedReceivePackets = new LinkedList<Packet>();
+	private ConcurrentLinkedQueue<Packet> stagedSendPackets = new ConcurrentLinkedQueue<Packet>();
 	private boolean pingSocketsPeriodically = false;
 
 	public Server(int port) {
@@ -449,7 +452,7 @@ public class Server extends Network {
 	}
 
 	public boolean hasReceivedPacket() {
-		return hasReceived || stagedPackets.size() > 0;
+		return hasReceived || stagedReceivePackets.size() > 0;
 		// for(ConcurrentLinkedQueue<Packet> receiveBuffer :
 		// receiveBuffers.values()){
 		// if(receiveBuffer.size() > 0){
@@ -473,7 +476,7 @@ public class Server extends Network {
 	 * This method will not stage more packets until
 	 */
 	public void stageReceivedPacketsForRemoval() {
-		if (stagedPackets.size() > 0) {
+		if (stagedReceivePackets.size() > 0) {
 			return;
 		}
 		keys.clear();
@@ -495,7 +498,7 @@ public class Server extends Network {
 				// TODO Concern : what if buffer is dumped? (nullptr).
 				// Solutions: create lock specifically for buffer dumping?
 				// OR - Maybe require dumping to dump staged packets?
-				stagedPackets.add(buffer.poll());
+				stagedReceivePackets.add(buffer.poll());
 			}
 		}
 		// set flag for packets in receive buffer false (all should be staged)
@@ -503,11 +506,11 @@ public class Server extends Network {
 	}
 
 	public boolean hasStagedPackets() {
-		return stagedPackets.size() > 0;
+		return stagedReceivePackets.size() > 0;
 	}
 
 	public Packet getNextStagedPacket() {
-		return stagedPackets.poll();
+		return stagedReceivePackets.poll();
 	}
 
 	public Packet getNextReceivedPacket() {
@@ -526,19 +529,29 @@ public class Server extends Network {
 		// TODO concern: potentially make another buffer between this and the
 		// buffer that threads collect from
 		final Packet copy = packet.makeCopy();
+		
+		//the staged send packets cause async threads to maintain ordering of packets
+		stagedSendPackets.add(copy);
 
-		// load copy using a new thread
+		// cause the server to load one packet from the stagedQueue
 		new Thread(new Runnable() {
 			public void run() {
-				loadPacketIntoAllOutgoingBuffers(copy);
+				loadPacketIntoAllOutgoingBuffers();
 			}
 		}).start();
 	}
 
+	// These fields are used in loadPacketIntoAllOutgoingBuffers
+	// They prevent a de-syncrhonization from happening due to sending
+	// packets in multiple threads.
 	private boolean currentlyLoadingPacket = false;
 	private int callsToLoadPacketIntoAllOutgoingBuffers = 0;
 
-	public void loadPacketIntoAllOutgoingBuffers(Packet packet) {
+	/**
+	 * Simply loads 1 packet from the staged send packets to be sent over the server.
+	 */
+	private void loadPacketIntoAllOutgoingBuffers() {
+		Packet packet = stagedSendPackets.poll();
 		callsToLoadPacketIntoAllOutgoingBuffers++;
 		if (callsToLoadPacketIntoAllOutgoingBuffers > 10) {
 			System.out.println("WARNING: server send is becoming overloaded!" + "Currently "

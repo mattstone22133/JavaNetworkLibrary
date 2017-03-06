@@ -25,9 +25,9 @@ public class Client extends Network {
 	private Thread sendingThread;
 	private Thread receivingThread;
 
-	private ConcurrentLinkedQueue<Packet> queuedPackets = new ConcurrentLinkedQueue<Packet>();
+	private ConcurrentLinkedQueue<Packet> sendBuffer = new ConcurrentLinkedQueue<Packet>();
 	private ConcurrentLinkedQueue<Packet> receiveBuffer = new ConcurrentLinkedQueue<Packet>();
-
+	private ConcurrentLinkedQueue<Packet> stageForSendBuffer = new ConcurrentLinkedQueue<Packet>();
 
 	private boolean threadsShouldLive = true;
 	private int blockingTimeoutMS = 5000;
@@ -149,11 +149,11 @@ public class Client extends Network {
 
 	public void sendingThreadMethod() {
 		while (threadsShouldLive) {
-			if (queuedPackets.size() > 0) {
-				Packet toSend = queuedPackets.peek();
+			if (sendBuffer.size() > 0) {
+				Packet toSend = sendBuffer.peek();
 				try {
 					send(toSend);
-					queuedPackets.poll();
+					sendBuffer.poll();
 				} catch (IOException e) {
 					// failed to send - do not remove packet from queue
 					sendFailures++;
@@ -233,7 +233,24 @@ public class Client extends Network {
 	 * @param packet
 	 */
 	public void queueToSend(Packet packet) {
-		queuedPackets.add(packet.makeCopy());
+		// queuedPackets.add(packet.makeCopy());
+		// TODO concern: potentially make another buffer between this and the
+		// buffer that threads collect from
+		final Packet copy = packet.makeCopy();
+
+		stageForSendBuffer.add(copy);
+		
+		// load copy using a new thread
+		new Thread(new Runnable() {
+			public void run() {
+				loadPacketToOutGoing();
+			}
+		}).start();
+	}
+
+	private void loadPacketToOutGoing() {
+		Packet packet = stageForSendBuffer.poll();
+		sendBuffer.add(packet);
 	}
 
 	private void sleepThread(int ms) {
@@ -263,7 +280,7 @@ public class Client extends Network {
 	public boolean hasReceivedPacket() {
 		return receiveBuffer.size() > 0;
 	}
-	
+
 	public Packet getNextReceivedPacket() {
 		return receiveBuffer.poll();
 	}

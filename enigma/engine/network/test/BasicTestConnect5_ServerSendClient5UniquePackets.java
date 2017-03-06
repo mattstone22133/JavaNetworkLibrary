@@ -53,6 +53,7 @@ public class BasicTestConnect5_ServerSendClient5UniquePackets {
 	 */
 	@Test
 	public void test() {
+		TestTools.sleepForMS(100);
 		Long start = System.currentTimeMillis();
 
 		// Start a server
@@ -84,6 +85,7 @@ public class BasicTestConnect5_ServerSendClient5UniquePackets {
 		
 		int waitForPacket = 100;
 		TestTools.sleepForMS(waitForPacket);
+		DemoConcretePacket lastPacket = null;
 		long receiveStart = System.currentTimeMillis();		
 		int counter = 0;
 
@@ -101,7 +103,9 @@ public class BasicTestConnect5_ServerSendClient5UniquePackets {
 			assertEquals("packets had different Y values", packet.getY(), pkt.getY(), 0.001);
 			assertEquals("packets had different rotation values", packet.getRotation(), pkt.getRotation(), 0.001);
 			assertTrue("packets are same instance", pkt != packet);
+			assertTrue("current received packet and last packet are the same instance", pkt != lastPacket);
 			counter++;
+			lastPacket = pkt;
 		}
 		assertTrue("server only received " + counter + " packets, expected: " + packets.size(),
 				counter == packets.size());
