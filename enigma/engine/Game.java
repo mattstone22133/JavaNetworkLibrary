@@ -90,7 +90,13 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 			controlTarget.controlledByPlayer(camera);
 			controlTarget.handleLogic();
 		}
+		
+		networkLogic();
 
+	}
+
+	private void networkLogic() {
+		
 	}
 
 	private void gameIO() {

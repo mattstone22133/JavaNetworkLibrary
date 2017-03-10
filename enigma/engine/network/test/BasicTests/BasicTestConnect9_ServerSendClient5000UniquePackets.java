@@ -1,4 +1,4 @@
-package enigma.engine.network.test;
+package enigma.engine.network.test.BasicTests;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -7,6 +7,7 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 
 import org.junit.After;
 import org.junit.Before;
@@ -15,9 +16,11 @@ import org.junit.Test;
 import enigma.engine.network.Client;
 import enigma.engine.network.DemoConcretePacket;
 import enigma.engine.network.FailedToConnect;
+import enigma.engine.network.Packet;
 import enigma.engine.network.Server;
+import enigma.engine.network.test.TestTools;
 
-public class BasicTestConnect3_ServerSendToClient {
+public class BasicTestConnect9_ServerSendClient5000UniquePackets {
 	private Client client;
 	private Server server;
 	private int listenPort = 25565;
@@ -51,6 +54,7 @@ public class BasicTestConnect3_ServerSendToClient {
 	 */
 	@Test
 	public void test() {
+		TestTools.sleepForMS(100);
 		Long start = System.currentTimeMillis();
 
 		// Start a server
@@ -71,30 +75,40 @@ public class BasicTestConnect3_ServerSendToClient {
 		System.out.println("\tServer and client connected at: " + (System.currentTimeMillis() - start) + "ms from start.");
 
 		// create and send a packet to the client
-		DemoConcretePacket packet = new DemoConcretePacket(1, 2, 3, 4);
-		server.queueToSend(packet);
-		
-		
-		int waitForPacket = 100;
-		TestTools.sleepForMS(waitForPacket);
-		long receiveStart = System.currentTimeMillis();		
-		
-		//check if packet was received at client
-		if(client.hasReceivedPacket()){
-			DemoConcretePacket receivePkt = (DemoConcretePacket) client.getNextReceivedPacket();
-			System.out.println("\tTime to process receive: " + (System.currentTimeMillis() - receiveStart) + "ms.");
-			if(receivePkt != null){
-				assertEquals("packet's didn't have same playerID field", packet.getId(), packet.getId());
-				assertEquals("packets had different X values", packet.getX(), receivePkt.getX(), 0.001);
-				assertEquals("packets had different Y values", packet.getY(), receivePkt.getY(), 0.001);
-				assertEquals("packets had different rotation values", packet.getRotation(), receivePkt.getRotation(), 0.001);
-				assertTrue("packets are same instance", receivePkt != packet);
-			} else {
-				fail("receive packet was null");
-			}
-		}else {
-			fail("client did not receive a packet within " + waitForPacket + "ms.");
+		ArrayList<DemoConcretePacket> packets = new ArrayList<DemoConcretePacket>();
+		for (int i = 0; i < 5000; ++i) {
+			packets.add(new DemoConcretePacket(i, 2 * i, 3 * i, 4 * i));
 		}
-	}
+		for (Packet packet : packets) {
+			server.queueToSend(packet);
+		}
+		
+		
+		int waitForPacket = 1500;
+		TestTools.sleepForMS(waitForPacket);
+		DemoConcretePacket lastPacket = null;
+		long receiveStart = System.currentTimeMillis();		
+		int counter = 0;
 
+		if (!client.hasReceivedPacket()) {
+			fail("server did not identify that it received a packet after" + waitForPacket + "ms.");
+		}
+		// check if packet was received at server
+		while (client.hasReceivedPacket()) {
+			DemoConcretePacket packet = packets.get(counter);
+			DemoConcretePacket pkt = (DemoConcretePacket) client.getNextReceivedPacket();
+			System.out.println("\tTime to process receive: " + (System.currentTimeMillis() - receiveStart) + "ms.");
+
+			assertEquals("packet's didn't have same playerID field", packet.getId(), packet.getId());
+			assertEquals("packets had different X values", packet.getX(), pkt.getX(), 0.001);
+			assertEquals("packets had different Y values", packet.getY(), pkt.getY(), 0.001);
+			assertEquals("packets had different rotation values", packet.getRotation(), pkt.getRotation(), 0.001);
+			assertTrue("packets are same instance", pkt != packet);
+			assertTrue("current received packet and last packet are the same instance", pkt != lastPacket);
+			counter++;
+			lastPacket = pkt;
+		}
+		assertTrue("server only received " + counter + " packets, expected: " + packets.size(),
+				counter == packets.size());
+	}
 }

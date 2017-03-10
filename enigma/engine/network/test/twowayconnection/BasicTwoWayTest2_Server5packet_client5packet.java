@@ -1,4 +1,4 @@
-package enigma.engine.network.test;
+package enigma.engine.network.test.twowayconnection;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -18,8 +18,10 @@ import enigma.engine.network.DemoConcretePacket;
 import enigma.engine.network.FailedToConnect;
 import enigma.engine.network.Packet;
 import enigma.engine.network.Server;
+import enigma.engine.network.test.TestTools;
 
-public class BasicTestConnect4_ClientSendServer5UniquePackets {
+public class BasicTwoWayTest2_Server5packet_client5packet {
+
 	private Client client;
 	private Server server;
 	private int listenPort = 25565;
@@ -50,10 +52,75 @@ public class BasicTestConnect4_ClientSendServer5UniquePackets {
 	}
 
 	/**
-	 * Test a client connecting to a server. No data exchanged.
+	 * Testing that a the communication can be in two directions.
 	 */
 	@Test
-	public void test() {
+	public void testTwoWay2a_Connection5pkt() {
+		// Long start = System.currentTimeMillis();
+		setUpServerAndClient();
+
+		// basic client send test
+		clientSend_5();
+
+		// basic server send test
+		serverSend_5();
+	}
+	
+	@Test
+	public void testTwoWay2b_Connection5pkt_3x() {
+		// Long start = System.currentTimeMillis();
+		setUpServerAndClient();
+
+		clientSend_5();
+		serverSend_5();
+		clientSend_5();
+		serverSend_5();
+		clientSend_5();
+		serverSend_5();
+	}
+	
+	@Test
+	public void testTwoWay2c_Connection5pkt_variablesends() {
+		// Long start = System.currentTimeMillis();
+		setUpServerAndClient();
+
+		clientSend_5();
+		serverSend_5();
+		clientSend_5();
+		serverSend_5();
+		clientSend_5();
+		serverSend_5();
+		
+		clientSend_5();
+		serverSend_5();
+		clientSend_5();
+		serverSend_5();
+		serverSend_5();
+		serverSend_5();
+		serverSend_5();
+		clientSend_5();
+		serverSend_5();
+		clientSend_5();
+		serverSend_5();
+		clientSend_5();
+		serverSend_5();
+		clientSend_5();
+		clientSend_5();
+		clientSend_5();
+		clientSend_5();
+		serverSend_5();
+		clientSend_5();
+		serverSend_5();
+		clientSend_5();
+		serverSend_5();
+		clientSend_5();
+		clientSend_5();
+		serverSend_5();
+		clientSend_5();
+		serverSend_5();
+	}
+
+	private void setUpServerAndClient() {
 		Long start = System.currentTimeMillis();
 
 		// Start a server
@@ -74,7 +141,47 @@ public class BasicTestConnect4_ClientSendServer5UniquePackets {
 		}
 		System.out.println("\tServer and client connected at: "
 				+ (System.currentTimeMillis() - start - sleepForConnectMS) + "ms from start.");
+	}
 
+	private void serverSend_5() {
+		// create and send a packet to the client
+		ArrayList<DemoConcretePacket> packets = new ArrayList<DemoConcretePacket>();
+		for (int i = 0; i < 5; ++i) {
+			packets.add(new DemoConcretePacket(i, 2 * i, 3 * i, 4 * i));
+		}
+		for (Packet packet : packets) {
+			server.queueToSend(packet);
+		}
+
+		int waitForPacket = 100;
+		TestTools.sleepForMS(waitForPacket);
+		DemoConcretePacket lastPacket = null;
+		long receiveStart = System.currentTimeMillis();
+		int counter = 0;
+
+		if (!client.hasReceivedPacket()) {
+			fail("server did not identify that it received a packet after" + waitForPacket + "ms.");
+		}
+		// check if packet was received at server
+		while (client.hasReceivedPacket()) {
+			DemoConcretePacket packet = packets.get(counter);
+			DemoConcretePacket pkt = (DemoConcretePacket) client.getNextReceivedPacket();
+			System.out.println("\tTime to process receive: " + (System.currentTimeMillis() - receiveStart) + "ms.");
+
+			assertEquals("packet's didn't have same playerID field", packet.getId(), pkt.getId());
+			assertEquals("packets had different X values", packet.getX(), pkt.getX(), 0.001);
+			assertEquals("packets had different Y values", packet.getY(), pkt.getY(), 0.001);
+			assertEquals("packets had different rotation values", packet.getRotation(), pkt.getRotation(), 0.001);
+			assertTrue("packets are same instance", pkt != packet);
+			assertTrue("current received packet and last packet are the same instance", pkt != lastPacket);
+			counter++;
+			lastPacket = pkt;
+		}
+		assertTrue("server only received " + counter + " packets, expected: " + packets.size(),
+				counter == packets.size());
+	}
+
+	private void clientSend_5() {
 		// create and send a packet to the server
 		ArrayList<DemoConcretePacket> packets = new ArrayList<DemoConcretePacket>();
 		for (int i = 0; i < 5; ++i) {
@@ -99,7 +206,7 @@ public class BasicTestConnect4_ClientSendServer5UniquePackets {
 			DemoConcretePacket pkt = (DemoConcretePacket) server.getNextReceivedPacket();
 			System.out.println("\tTime to process receive: " + (System.currentTimeMillis() - receiveStart) + "ms.");
 
-			assertEquals("packet's didn't have same playerID field", packet.getId(), packet.getId());
+			assertEquals("packet's didn't have same playerID field", packet.getId(), pkt.getId());
 			assertEquals("packets had different X values", packet.getX(), pkt.getX(), 0.001);
 			assertEquals("packets had different Y values", packet.getY(), pkt.getY(), 0.001);
 			assertEquals("packets had different rotation values", packet.getRotation(), pkt.getRotation(), 0.001);
@@ -111,5 +218,4 @@ public class BasicTestConnect4_ClientSendServer5UniquePackets {
 		assertTrue("server only received " + counter + " packets, expected: " + packets.size(),
 				counter == packets.size());
 	}
-
 }

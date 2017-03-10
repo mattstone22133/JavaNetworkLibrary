@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * @version 1.0
  *
  */
-public class Server extends Network {
+public class Server {
 	private ServerSocket listener;
 	private Thread listeningThread;
 	private Thread socketValidationThread;
@@ -43,15 +43,15 @@ public class Server extends Network {
 	private long socketAliveCheckTimeoutMS = 30000;
 	private boolean ready = false;
 	private boolean closeAllThreads = false;
-	private boolean threadsShouldLive = true;
+	private volatile boolean threadsShouldLive = true;
 	// private int receiveFailureThreshold = 100;
 	private int sendFailureThreshold = 100;
 	private long failureSleepMSTime = 50;
 	private boolean isRunning;
 	private boolean hasReceived;
 	/**
-	 * provides a storage place to lump all received packets for user processing.
-	 * Non-concurrency is intentional.
+	 * provides a storage place to lump all received packets for user
+	 * processing. Non-concurrency is intentional.
 	 * 
 	 */
 	private LinkedList<Packet> stagedReceivePackets = new LinkedList<Packet>();
@@ -529,8 +529,9 @@ public class Server extends Network {
 		// TODO concern: potentially make another buffer between this and the
 		// buffer that threads collect from
 		final Packet copy = packet.makeCopy();
-		
-		//the staged send packets cause async threads to maintain ordering of packets
+
+		// the staged send packets cause async threads to maintain ordering of
+		// packets
 		stagedSendPackets.add(copy);
 
 		// cause the server to load one packet from the stagedQueue
@@ -541,33 +542,15 @@ public class Server extends Network {
 		}).start();
 	}
 
-	// These fields are used in loadPacketIntoAllOutgoingBuffers
-	// They prevent a de-syncrhonization from happening due to sending
-	// packets in multiple threads.
-	private boolean currentlyLoadingPacket = false;
-	private int callsToLoadPacketIntoAllOutgoingBuffers = 0;
-
 	/**
-	 * Simply loads 1 packet from the staged send packets to be sent over the server.
+	 * Simply loads 1 packet from the staged send packets to be sent over the
+	 * server.
 	 */
-	private void loadPacketIntoAllOutgoingBuffers() {
+	private synchronized void loadPacketIntoAllOutgoingBuffers() {
 		Packet packet = stagedSendPackets.poll();
-		callsToLoadPacketIntoAllOutgoingBuffers++;
-		if (callsToLoadPacketIntoAllOutgoingBuffers > 10) {
-			System.out.println("WARNING: server send is becoming overloaded!" + "Currently "
-					+ callsToLoadPacketIntoAllOutgoingBuffers + " calls to loadPacketIntoAllOutgoingBuffers() ");
-		}
-		while (currentlyLoadingPacket) {
-			sleepForMS(1);
-		}
-		// below is a variable to prevent having two calls to loadPacketInto
-		// happen simultaneously
-		currentlyLoadingPacket = true;
 		for (ConcurrentLinkedQueue<Packet> buffer : sendBuffer.values()) {
 			buffer.add(packet.makeCopy());
 		}
-		currentlyLoadingPacket = false;
-		callsToLoadPacketIntoAllOutgoingBuffers--;
 	}
 
 	public static void main(String[] args) throws UnknownHostException, InterruptedException {

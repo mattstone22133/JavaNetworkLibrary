@@ -1,10 +1,10 @@
-package enigma.engine.network.test;
+package enigma.engine.network.test.listentests;
 
 import static org.junit.Assert.*;
 
 import org.junit.Test;
 
-public class TestServerDisconnectReconnectDisonnectReconnectDisconnect {
+public class ListenTest1 {
 
 	@Test
 	public void test() {

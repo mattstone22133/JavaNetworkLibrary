@@ -8,5 +8,9 @@ package enigma.engine.network;
  *
  */
 public class Network {
-
+	boolean actAsServer = false;
+	
+	public void run(){
+		
+	}
 }

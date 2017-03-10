@@ -1,4 +1,4 @@
-package enigma.engine.network.test;
+package enigma.engine.network.test.BasicTests;
 
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -14,6 +14,7 @@ import org.junit.Test;
 import enigma.engine.network.Client;
 import enigma.engine.network.FailedToConnect;
 import enigma.engine.network.Server;
+import enigma.engine.network.test.TestTools;
 
 public class BasicTestConnect1 {
 	private Client client;

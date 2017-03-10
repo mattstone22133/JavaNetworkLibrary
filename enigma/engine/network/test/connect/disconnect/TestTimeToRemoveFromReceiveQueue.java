@@ -1,10 +1,10 @@
-package enigma.engine.network.test;
+package enigma.engine.network.test.connect.disconnect;
 
 import static org.junit.Assert.*;
 
 import org.junit.Test;
 
-public class TestServerWhenClientDisconnect {
+public class TestTimeToRemoveFromReceiveQueue {
 
 	@Test
 	public void test() {

@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * @version 1.0
  *
  */
-public class Client extends Network {
+public class Client {
 	private String address;
 	private int port;
 	private Socket TCPSocket;
@@ -29,7 +29,7 @@ public class Client extends Network {
 	private ConcurrentLinkedQueue<Packet> receiveBuffer = new ConcurrentLinkedQueue<Packet>();
 	private ConcurrentLinkedQueue<Packet> stageForSendBuffer = new ConcurrentLinkedQueue<Packet>();
 
-	private boolean threadsShouldLive = true;
+	private volatile boolean threadsShouldLive = true;
 	private int blockingTimeoutMS = 5000;
 	private int sendSleepDelay;
 
@@ -248,7 +248,7 @@ public class Client extends Network {
 		}).start();
 	}
 
-	private void loadPacketToOutGoing() {
+	private synchronized void loadPacketToOutGoing() {
 		Packet packet = stageForSendBuffer.poll();
 		sendBuffer.add(packet);
 	}

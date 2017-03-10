@@ -1,10 +1,10 @@
-package enigma.engine.network.test;
+package enigma.engine.network.test.connect.disconnect;
 
 import static org.junit.Assert.*;
 
 import org.junit.Test;
 
-public class TestServerClientTimeout {
+public class TestServerWhenClientDisconnect {
 
 	@Test
 	public void test() {

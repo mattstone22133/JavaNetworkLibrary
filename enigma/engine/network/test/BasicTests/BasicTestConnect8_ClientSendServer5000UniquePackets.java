@@ -1,4 +1,4 @@
-package enigma.engine.network.test;
+package enigma.engine.network.test.BasicTests;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -7,6 +7,7 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 
 import org.junit.After;
 import org.junit.Before;
@@ -15,9 +16,11 @@ import org.junit.Test;
 import enigma.engine.network.Client;
 import enigma.engine.network.DemoConcretePacket;
 import enigma.engine.network.FailedToConnect;
+import enigma.engine.network.Packet;
 import enigma.engine.network.Server;
+import enigma.engine.network.test.TestTools;
 
-public class BasicTestConnect2_ClientSendData {
+public class BasicTestConnect8_ClientSendServer5000UniquePackets {
 	private Client client;
 	private Server server;
 	private int listenPort = 25565;
@@ -30,7 +33,8 @@ public class BasicTestConnect2_ClientSendData {
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println();
-			fail("failed to set up in: " + this.getClass().toString() + "\n previous resources may not have been closed");
+			fail("failed to set up in: " + this.getClass().toString()
+					+ "\n previous resources may not have been closed");
 		}
 	}
 
@@ -69,18 +73,30 @@ public class BasicTestConnect2_ClientSendData {
 		} catch (UnknownHostException | FailedToConnect e) {
 			fail("failed to connect client to server.\n" + e.toString());
 		}
-		System.out.println("\tServer and client connected at: " + (System.currentTimeMillis() - start - sleepForConnectMS) + "ms from start.");
+		System.out.println("\tServer and client connected at: "
+				+ (System.currentTimeMillis() - start - sleepForConnectMS) + "ms from start.");
 
 		// create and send a packet to the server
-		DemoConcretePacket packet = new DemoConcretePacket(1, 2, 3, 4);
-		client.queueToSend(packet);
+		ArrayList<DemoConcretePacket> packets = new ArrayList<DemoConcretePacket>();
+		for (int i = 0; i < 500; ++i) {
+			packets.add(new DemoConcretePacket(i, 2 * i, 3 * i, 4 * i));
+		}
+		for (Packet packet : packets) {
+			client.queueToSend(packet);
+		}
 
-		int waitForPacket = 100;
+		int waitForPacket = 1000;
 		TestTools.sleepForMS(waitForPacket);
-
+		DemoConcretePacket lastPacket = null;
 		long receiveStart = System.currentTimeMillis();
+		int counter = 0;
+
+		if (!server.hasReceivedPacket()) {
+			fail("server did not identify that it received a packet after" + waitForPacket + "ms.");
+		}
 		// check if packet was received at server
-		if (server.hasReceivedPacket()) {
+		while (server.hasReceivedPacket()) {
+			DemoConcretePacket packet = packets.get(counter);
 			DemoConcretePacket pkt = (DemoConcretePacket) server.getNextReceivedPacket();
 			System.out.println("\tTime to process receive: " + (System.currentTimeMillis() - receiveStart) + "ms.");
 
@@ -89,10 +105,12 @@ public class BasicTestConnect2_ClientSendData {
 			assertEquals("packets had different Y values", packet.getY(), pkt.getY(), 0.001);
 			assertEquals("packets had different rotation values", packet.getRotation(), pkt.getRotation(), 0.001);
 			assertTrue("packets are same instance", pkt != packet);
-		} else {
-			fail("server did not identify that it received a packet after" + waitForPacket + "ms.");
+			assertTrue("current received packet and last packet are the same instance", pkt != lastPacket);
+			counter++;
+			lastPacket = pkt;
 		}
-
+		assertTrue("server only received " + counter + " packets, expected: " + packets.size(),
+				counter == packets.size());
 	}
 
 }
