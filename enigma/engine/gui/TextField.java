@@ -246,4 +246,16 @@ public class TextField implements UIObject {
 	public String getValue() {
 		return drawStr.getText();
 	}
+	
+	public String getLabel(){
+		return permStr.getText();
+	}
+
+	public void setValue(String newValue) {
+		this.value.setLength(0);
+		this.value.append(newValue);
+		drawStr.setText(newValue);
+		setPosition(x, y);
+
+	}
 }

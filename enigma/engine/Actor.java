@@ -7,7 +7,11 @@ import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Vector3;
 
+import enigma.engine.data.compression.ActorData;
+
 public class Actor {
+	private static int actorNumber = 0;
+	private int id = 0;
 	private Sprite sprite;
 	private float moveSpeed;
 	private float angleSpeed;
@@ -20,6 +24,7 @@ public class Actor {
 	public Actor() {
 		sprite = new Sprite(TextureStorage.genericSpriteTexture);
 		setMoveSpeed(10.0f);
+		this.id = Actor.actorNumber;
 	}
 
 	/**
@@ -140,6 +145,16 @@ public class Actor {
 	public void setMoveSpeed(float moveSpeed) {
 		this.moveSpeed = moveSpeed;
 		this.angleSpeed = calcMovSpeed45Degree();
+	}
+
+	public ActorData getCompresedData() {
+		return new ActorData(id, rotation, sprite.getX(), sprite.getY());
+	}
+
+	public void updateToData(ActorData actor) {
+		this.sprite.setX(actor.x);
+		this.sprite.setY(actor.y);
+		this.sprite.setRotation(actor.rotation);
 	}
 
 }

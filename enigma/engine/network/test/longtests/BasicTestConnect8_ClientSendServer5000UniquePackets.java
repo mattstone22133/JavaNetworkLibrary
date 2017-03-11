@@ -1,4 +1,4 @@
-package enigma.engine.network.test.BasicTests;
+package enigma.engine.network.test.longtests;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;

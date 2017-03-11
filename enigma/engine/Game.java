@@ -1,5 +1,9 @@
 package enigma.engine;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
@@ -9,7 +13,11 @@ import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Vector3;
 
-import enigma.engine.gui.GameMenu;
+import enigma.engine.data.compression.ActorData;
+import enigma.engine.data.compression.DataCompressor;
+import enigma.engine.gui.NetworkGameMenuPrototype;
+import enigma.engine.network.FailedToConnect;
+import enigma.engine.network.Network;
 
 public class Game extends ApplicationAdapter implements InputProcessor {
 	/** Main camera of the game */
@@ -19,8 +27,11 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 	private Actor controlTarget;
 	private DrawableString title;
 
-	private GameMenu networkMenu;
-	boolean showNetworkMenu = false;
+	private NetworkGameMenuPrototype networkMenu;
+	private boolean drawNetworkMenu = false;
+	private Network network = new Network();;
+
+	private
 
 	// touch events
 	Vector3 convertedCoords;
@@ -35,12 +46,14 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 		title.startAnimation();
 		controlTarget = new Actor();
 
-		networkMenu = new GameMenu();
+		network.verbose = true;
+		networkMenu = new NetworkGameMenuPrototype();
 		networkMenu.setPosition(0 - networkMenu.getTableWidth() / 2, 0 - networkMenu.getTableHeight() / 2);
+		setNetworkMenuToLocalHost();
 
 		convertedCoords = new Vector3(0.0f, 0.0f, 0.0f);
-
 		createCamera();
+
 	}
 
 	@Override
@@ -65,7 +78,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 			title.draw(batch);
 		}
 
-		if (showNetworkMenu && networkMenu != null) {
+		if (drawNetworkMenu && networkMenu != null) {
 			networkMenu.draw(batch);
 		}
 
@@ -81,7 +94,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 	private void gameLogic() {
 		gameIO();
 
-		if (showNetworkMenu && networkMenu != null) {
+		if (drawNetworkMenu && networkMenu != null) {
 			networkMenu.logic();
 		}
 
@@ -90,13 +103,96 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 			controlTarget.controlledByPlayer(camera);
 			controlTarget.handleLogic();
 		}
-		
+
 		networkLogic();
 
 	}
 
 	private void networkLogic() {
-		
+		pollNetworkMenu();
+		receiveData();
+		sendData();
+	}
+
+	private void receiveData() {
+		boolean shouldStop = false;
+
+		// open at maximum 20 packets this iteration
+		for (int i = 0; i < 20 && !shouldStop; ++i) {
+			GameDataPacket packet = (GameDataPacket) network.getNextReceivedPacket();
+			if (packet == null) {
+				shouldStop = true;
+			} else {
+				for (DataCompressor actor : packet.actorsAdded) {
+					// this should use a hash map and look up actors based on ID
+					controlTarget.updateToData((ActorData)actor);
+				}
+			}
+		}
+
+	}
+
+	private void sendData() {
+		if (network.sendDelayTimerExpired() && network.isRunning()) {
+			if (network.inServerMode()) {
+				GameDataPacket packetToSend = makePacket();
+				network.queueToSend(packetToSend);
+			}
+		}
+	}
+
+	private GameDataPacket makePacket() {
+		GameDataPacket packet = new GameDataPacket();
+		// this is where all game information that needs to be sent should be loaded into a packet.
+		packet.addActor(controlTarget);
+		return packet;
+	}
+
+	private void pollNetworkMenu() {
+		if (drawNetworkMenu) {
+			if (networkMenu.connectWasJustClicked()) {
+				networkConnect();
+			} else if (networkMenu.disconnectWasJustClicked()) {
+				networkDisconnect();
+			}
+		}
+	}
+
+	private void networkDisconnect() {
+		boolean serverMode = networkMenu.inServerMode();
+		String toPrint = "Disconnect was pressed for";
+		if (serverMode) {
+			toPrint += " server";
+		} else {
+			toPrint += " client";
+		}
+		network.disconnect();
+		System.out.println(toPrint);
+	}
+
+	private void networkConnect() {
+		// Do not attempt a connection if network is already running
+		if (network.isRunning()) {
+			System.out.println("connect error - network already running");
+			return;
+		}
+
+		boolean serverMode = networkMenu.inServerMode();
+		String toPrint = "Connect was pressed for";
+		if (serverMode) {
+			toPrint += " server";
+			network.serverMode();
+
+		} else {
+			toPrint += " client";
+			network.clientMode();
+		}
+		try {
+			network.run();
+		} catch (IOException | FailedToConnect e) {
+			e.printStackTrace();
+		}
+		System.out.println(toPrint);
 	}
 
 	private void gameIO() {
@@ -104,7 +200,7 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 			Gdx.app.exit();
 		}
 		if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
-			showNetworkMenu = !showNetworkMenu;
+			drawNetworkMenu = !drawNetworkMenu;
 		}
 		if (title != null) {
 			title.animateLogic();
@@ -121,6 +217,16 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 		float rawX = Gdx.input.getX();
 		float rawY = Gdx.input.getY();
 		camera.unproject(storage.set(rawX, rawY, 0));
+	}
+
+	private void setNetworkMenuToLocalHost() {
+		networkMenu.setPort(25565);
+		try {
+
+			networkMenu.setIP(InetAddress.getLocalHost().getHostAddress());
+		} catch (UnknownHostException e) {
+			e.printStackTrace();
+		}
 	}
 
 	@Override

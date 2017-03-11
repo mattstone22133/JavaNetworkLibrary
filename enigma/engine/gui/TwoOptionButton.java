@@ -19,7 +19,7 @@ public class TwoOptionButton implements UIObject {
 	public TwoOptionButton(String text1, String text2, float width, float height, float x, float y) {
 		leftBtn = new OnOffButton(text1, (width - separationFactor / 2) / 2, height, x, y);
 		rightBtn = new OnOffButton(text2, (width - separationFactor / 2) / 2, height, x + width + width * separationFactor / 2, y);
-
+		activateLeft();
 	}
 
 	@Override
@@ -71,10 +71,12 @@ public class TwoOptionButton implements UIObject {
 			leftBtn.makeActive();
 			rightBtn.makeInactive();
 			lastTimeoutValue = System.currentTimeMillis();
+			return true;
 		} else if (rightBtn.isTouched(touchCoords)) {
 			rightBtn.makeActive();
 			leftBtn.makeInactive();
 			lastTimeoutValue = System.currentTimeMillis();
+			return true;
 
 		} else {
 
@@ -108,6 +110,10 @@ public class TwoOptionButton implements UIObject {
 
 	public void activateLeft() {
 		leftBtn.makeActive();
+	}
+	
+	public boolean leftIsActive(){
+		return leftBtn.getActive();
 	}
 	
 	public void setActiveTimeoutModel(boolean timeoutYN){
