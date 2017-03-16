@@ -1,10 +1,10 @@
-package enigma.engine.network.test.connect.disconnect;
+package enigma.engine.network.test.connect.disconnect.blackbox;
 
 import static org.junit.Assert.*;
 
 import org.junit.Test;
 
-public class TestServerDisconnectReconnect {
+public class TestServerWhenClientDisconnect {
 
 	@Test
 	public void test() {

@@ -5,7 +5,7 @@ import org.junit.runners.Suite;
 import org.junit.runners.Suite.SuiteClasses;
 
 import enigma.engine.network.test.BasicTests.AllBasicTests;
-import enigma.engine.network.test.connect.disconnect.AllConnectDisconnectTests;
+import enigma.engine.network.test.connect.disconnect.blackbox.AllConnectDisconnectTests;
 import enigma.engine.network.test.listentests.AllListenTests;
 import enigma.engine.network.test.twowayconnection.AllTwoWayTests;
 

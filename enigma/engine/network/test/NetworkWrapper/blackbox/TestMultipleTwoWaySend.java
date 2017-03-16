@@ -1,10 +1,10 @@
-package enigma.engine.network.test.connect.disconnect;
+package enigma.engine.network.test.networkwrapper.blackbox;
 
 import static org.junit.Assert.*;
 
 import org.junit.Test;
 
-public class TestTimeToRemoveFromReceiveQueue {
+public class TestMultipleTwoWaySend {
 
 	@Test
 	public void test() {

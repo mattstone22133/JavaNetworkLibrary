@@ -57,8 +57,6 @@ public class Tools {
 		float maxX = pnt2.x + (pnt2Wid / 2) + threshold;
 		float minX = pnt2.x - (pnt2Wid / 2) - threshold;
 
-		// check four corner points (TODO: this is wasteful, change so that it only calculates
-		// points if previous calculation failed?)
 		boolean bottomLeftCollides = Tools.pointWithinBounds(objMinX, objMinY, minX, maxX, minY, maxY);
 		boolean bottomRightCollides = Tools.pointWithinBounds(objMaxX, objMinY, minX, maxX, minY, maxY);
 		boolean topLeftCollides = Tools.pointWithinBounds(objMinX, objMaxY, minX, maxX, minY, maxY);

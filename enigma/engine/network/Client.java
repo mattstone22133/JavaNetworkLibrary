@@ -24,14 +24,17 @@ public class Client {
 	private ObjectOutputStream outStream;
 	private Thread sendingThread;
 	private Thread receivingThread;
+	private Thread sendIntermediateStageThread;
+	private boolean sendBufferLock = false;
 
 	private ConcurrentLinkedQueue<Packet> sendBuffer = new ConcurrentLinkedQueue<Packet>();
 	private ConcurrentLinkedQueue<Packet> receiveBuffer = new ConcurrentLinkedQueue<Packet>();
 	private ConcurrentLinkedQueue<Packet> stageForSendBuffer = new ConcurrentLinkedQueue<Packet>();
 
 	private volatile boolean threadsShouldLive = true;
-	private int blockingTimeoutMS = 5000;
+	private int blockingTimeoutMS = 1000;
 	private int sendSleepDelay;
+	private boolean verbose = false;
 
 	// reconnection
 	int sendFailures = 0;
@@ -49,10 +52,12 @@ public class Client {
 			throw new IllegalStateException("Client: Socket Not Closed");
 		}
 
-		if (!connectSocket(address, dstPort)) {
+		// Connect the data socket
+		if (!connectDataSocket(address, dstPort)) {
 			throw new FailedToConnect("Could not establish socket");
 		}
 
+		// Set up the data Streams
 		if (!setupStreams()) {
 			closeTCPSocket();
 			throw new FailedToConnect("Could not set up streams");
@@ -75,6 +80,14 @@ public class Client {
 			}
 		});
 		receivingThread.start();
+		
+		//staging thread to prevent user from experiencing blocking when queuing send
+		sendIntermediateStageThread = new Thread(new Runnable() {
+			 public void run() {
+				 loadStagedPacketToOutGoing();
+		 	}
+		 });
+		sendIntermediateStageThread.start();
 
 		// connection successful, update these fields @formatter:on
 		this.address = address;
@@ -94,7 +107,7 @@ public class Client {
 		return true;
 	}
 
-	private boolean connectSocket(String address, int port) throws FailedToConnect {
+	private boolean connectDataSocket(String address, int port) throws FailedToConnect {
 		boolean ret = true;
 		try {
 			TCPSocket = new Socket(address, port);
@@ -125,7 +138,10 @@ public class Client {
 		while (threadsShouldLive) {
 			try {
 				Packet inbound = (Packet) inStream.readObject();
-				receiveBuffer.add(inbound);
+				if (!checkForSystemMessage(inbound) && inbound != null) {
+					// not a system message, add the packet to buffer
+					receiveBuffer.add(inbound);
+				}
 
 			} catch (ClassNotFoundException e) {
 				e.printStackTrace();
@@ -139,15 +155,11 @@ public class Client {
 					receiveFailures = 0;
 				}
 			}
-
-			// pause thread
-			if (sendSleepDelay > 0) {
-				sleepThread(sendSleepDelay);
-			}
 		}
 	}
 
 	public void sendingThreadMethod() {
+		// Only this method should ever do peeks and polls from the sendBuffer;
 		while (threadsShouldLive) {
 			if (sendBuffer.size() > 0) {
 				Packet toSend = sendBuffer.peek();
@@ -162,13 +174,29 @@ public class Client {
 						sendFailures = 0;
 					}
 				}
-
-				// pause thread
-				if (sendSleepDelay > 0) {
-					sleepThread(sendSleepDelay);
-				}
 			}
+		}
+	}
 
+	private boolean checkForSystemMessage(Packet inbound) {
+		if (inbound instanceof SystemMessagePacket) {
+			SystemMessagePacket systemMessage = (SystemMessagePacket) inbound;
+			handleSystemMessage(systemMessage);
+			return true;
+		}
+		// was not a system message.
+		return false;
+	}
+
+	private void handleSystemMessage(SystemMessagePacket systemMessage) {
+		// Check if the server is telling the client to disconnect (security vulnerability?)
+		// Implement a hash code check to verify validity of server if this becomes a problem
+		if (systemMessage.connetionShouldClose()) {
+			// if TCP protocol is flawed (which I have read may be case) then some redundancy might
+			// be needed in order to ensure a disconnect was actually sent.
+			// for example, maybe require a counter of 3 disconnect packets.
+			if (verbose) System.out.println("received disconnect syste message");
+			disconnect(false);
 		}
 	}
 
@@ -182,7 +210,7 @@ public class Client {
 
 			// attempt a reconnect until user decides to disconnect (which sets
 			// threadsShouldLive)
-			while (threadsShouldLive && !isConnected()) {
+			while (threadsShouldLive && !isRunning()) {
 				try {
 					connect(address, port);
 				} catch (FailedToConnect e) {
@@ -196,10 +224,13 @@ public class Client {
 		// TODO kill receive stream to interrupt with thread with IO exception,
 		// which will check threadsShouldLive
 		while (receivingThread != null && receivingThread.isAlive()) {
-			sleepThread(1000);
+			sleepThread(100);
 		}
 		while (sendingThread != null && sendingThread.isAlive()) {
-			sleepThread(1000);
+			sleepThread(100);
+		}
+		while (sendIntermediateStageThread != null && sendIntermediateStageThread.isAlive()) {
+			sleepThread(100);
 		}
 	}
 
@@ -210,47 +241,101 @@ public class Client {
 		outStream.writeObject(packet);
 	}
 
-	public void disconnect() {
-		// TODO: finish developing this
+	private boolean disconnect(boolean sendDisconnectMessage) {
+		// send a disconnect system message to server
+		if (sendDisconnectMessage) {
+			sendDisconnectSystemMessage();
+		}
+		//kill threads after the message to system has been sent
 		threadsShouldLive = false;
+
 		try {
 			if (TCPSocket != null) {
 				TCPSocket.close();
 			}
+			if (verbose) {
+				System.out.println("Client: disconnecting initiated");
+			}
+			return true;
 		} catch (IOException e) {
 			e.printStackTrace();
+			System.out.println("Client: disconnecting failed");
+			return false;
 		}
 	}
 
-	public boolean isConnected() {
-		return TCPSocket.isConnected() && inStream != null && outStream != null;
+	/**
+	 * A non-blocking disconnect.
+	 */
+	public void disconnect() {
+		// launch disconnect in new thread to prevent blocking for user.
+		Thread disconnectThread = new Thread(new Runnable() {
+			public void run() {
+				disconnect(true);
+			}
+		});
+		disconnectThread.start();
 	}
 
 	/**
-	 * Prepare a packet to be sent next. Once a packet is queued, it cannot be
-	 * removed.
+	 * Sends a system message indicating to the server that the client will disconnect.
+	 * 
+	 * @SideEffect the method locks the sendBuffer until the method is complete.
+	 * @SideEffect the method blocks for at maximum 5 seconds
+	 */
+	private void sendDisconnectSystemMessage() {
+		// lock the send buffer
+		sendBufferLock = true;
+
+		// clear the buffer so that the system message can be placed at the start
+		sendBuffer.clear();
+
+		// create a disconnect system message to send
+		SystemMessagePacket closeMessage = new SystemMessagePacket();
+		closeMessage.setConnectionShouldClose(true);
+		sendBuffer.add(closeMessage);
+
+		// loop until message sent (send buffer == 0) or 5 seconds is up
+		long start = System.currentTimeMillis();
+		long delayMS = 5000; // if changed update java doc TODO - this will block user!
+		while (sendBuffer.size() > 0 && System.currentTimeMillis() - start < delayMS) {
+			sleepThread(1);
+		}
+
+		// unlock the send buffer
+		sendBufferLock = false;
+	}
+
+	// removed because isRunning does same job
+	// public boolean isConnected() {
+	// boolean tcpIsConnected = false;
+	// if (TCPSocket != null) {
+	// tcpIsConnected = TCPSocket.isClosed();
+	// }
+	// return tcpIsConnected && inStream != null && outStream != null;
+	// }
+
+	/**
+	 * Prepare a packet to be sent next. Once a packet is queued, it cannot be removed.
 	 * 
 	 * @param packet
 	 */
 	public void queueToSend(Packet packet) {
-		// queuedPackets.add(packet.makeCopy());
-		// TODO concern: potentially make another buffer between this and the
-		// buffer that threads collect from
 		final Packet copy = packet.makeCopy();
 
+		// addition staging buffer to reduce chance of server blocking user
 		stageForSendBuffer.add(copy);
-		
-		// load copy using a new thread
-		new Thread(new Runnable() {
-			public void run() {
-				loadPacketToOutGoing();
-			}
-		}).start();
+
 	}
 
-	private synchronized void loadPacketToOutGoing() {
-		Packet packet = stageForSendBuffer.poll();
-		sendBuffer.add(packet);
+	protected void loadStagedPacketToOutGoing() {
+		while (threadsShouldLive) {
+			// use "if" instead of "while" so that threadsShouldLive checked every loading iter
+			if (stageForSendBuffer.size() > 0 && !sendBufferLock) {
+				Packet toSend = stageForSendBuffer.poll();
+				sendBuffer.add(toSend);
+			}
+		}
 	}
 
 	private void sleepThread(int ms) {

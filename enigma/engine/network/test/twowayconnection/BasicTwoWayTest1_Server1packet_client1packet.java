@@ -43,10 +43,11 @@ public class BasicTwoWayTest1_Server1packet_client1packet {
 		client.disconnect();
 		TestTools.sleepForMS(500);
 		int counter = 0;
-		while ((server.isRunning() || client.isRunning() && counter < 10)) {
-			TestTools.sleepForMS(500);
+		while ((server.isRunning() || client.isRunning() && counter < 100)) {
+			TestTools.sleepForMS(50);
 			counter++;
 		}
+		System.out.println("Tear down; counter: " + counter);
 	}
 
 	/**
@@ -131,7 +132,7 @@ public class BasicTwoWayTest1_Server1packet_client1packet {
 		serverPacket = new DemoConcretePacket(1, 2, 3, 4);
 		server.queueToSend(serverPacket);
 
-		int waitForPacket = 50;
+		int waitForPacket = 100;
 		TestTools.sleepForMS(waitForPacket);
 		long receiveStart = System.currentTimeMillis();
 
@@ -159,7 +160,7 @@ public class BasicTwoWayTest1_Server1packet_client1packet {
 		clientPacket = new DemoConcretePacket(1, 2, 3, 4);
 		client.queueToSend(clientPacket);
 
-		int waitForPacket = 50;
+		int waitForPacket = 100;
 		TestTools.sleepForMS(waitForPacket);
 
 		long receiveStart = System.currentTimeMillis();

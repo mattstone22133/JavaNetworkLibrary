@@ -11,5 +11,5 @@ import org.junit.runners.Suite.SuiteClasses;
 		BasicTestConnect6_ClientSendServer500UniquePackets.class,
 		BasicTestConnect7_ServerSendClient500UniquePackets2.class,})
 public class AllBasicTests {
-
+	
 }

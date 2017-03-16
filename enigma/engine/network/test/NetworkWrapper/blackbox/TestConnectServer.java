@@ -1,10 +1,10 @@
-package enigma.engine.network.test.networkwrapper;
+package enigma.engine.network.test.networkwrapper.blackbox;
 
 import static org.junit.Assert.*;
 
 import org.junit.Test;
 
-public class TestReceiveClient {
+public class TestConnectServer {
 
 	@Test
 	public void test() {

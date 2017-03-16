@@ -26,24 +26,26 @@ public class Server {
 	private ServerSocket listener;
 	private Thread listeningThread;
 	private Thread socketValidationThread;
+	private Thread systemMsgThread;
 	private ConcurrentHashMap<Integer, Socket> sockets = new ConcurrentHashMap<Integer, Socket>();
 	private ConcurrentHashMap<Socket, Thread> outThreads = new ConcurrentHashMap<Socket, Thread>();
 	private ConcurrentHashMap<Socket, Thread> inThreads = new ConcurrentHashMap<Socket, Thread>();
 	private Thread stagingSendThread;
 	private ConcurrentHashMap<Socket, ObjectInputStream> inStreams = new ConcurrentHashMap<Socket, ObjectInputStream>();
 	private ConcurrentHashMap<Socket, ObjectOutputStream> outStreams = new ConcurrentHashMap<Socket, ObjectOutputStream>();
-	private ConcurrentHashMap<Socket, ConcurrentLinkedQueue<Packet>> sendBuffer = new ConcurrentHashMap<>();
+	private ConcurrentHashMap<Socket, ConcurrentLinkedQueue<Packet>> sendBuffers = new ConcurrentHashMap<>();
 	private ConcurrentHashMap<Socket, ConcurrentLinkedQueue<Packet>> receiveBuffers = new ConcurrentHashMap<>();
 	private ConcurrentHashMap<Socket, Integer> receiveFailures = new ConcurrentHashMap<Socket, Integer>();
 	private ConcurrentHashMap<Socket, Integer> sendFailures = new ConcurrentHashMap<Socket, Integer>();
 	private ConcurrentHashMap<Socket, Boolean> threadShouldLive = new ConcurrentHashMap<Socket, Boolean>();
+	private ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean> sendBufferLocks = new ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean>();
+	private ConcurrentLinkedQueue<Socket> socketsForSystemToDrop = new ConcurrentLinkedQueue<Socket>();
 
 	private int port;
 	private short maxPlayers = 8;
-	private int blockingTimeoutMS = 5000;
+	private int blockingTimeoutMS = 1000;
 	private long socketAliveCheckTimeoutMS = 30000;
-	private boolean ready = false;
-	private boolean closeAllThreads = false;
+
 	private volatile boolean threadsShouldLive = true;
 	// private int receiveFailureThreshold = 100;
 	private int sendFailureThreshold = 100;
@@ -61,11 +63,21 @@ public class Server {
 
 	public Server(int port) {
 		this.port = port;
-		ready = true;
-
+		// ready = true; //TODO remove this if decide against this logic approach
 	}
 
+	/**
+	 * Start the server running. Uses the listening port that has been set through constructor or
+	 * setter. If the server is already running, this method simply returns.
+	 * 
+	 * @throws IOException if server can not start a socket.
+	 */
 	public void run() throws IOException {
+		if (isRunning()) {
+			System.out.println("Server already running");
+			return;
+		}
+
 		threadsShouldLive = true;
 		listener = new ServerSocket(port);
 
@@ -86,27 +98,24 @@ public class Server {
 		
 		stagingSendThread = new Thread(new Runnable() {
 			public void run() {
-				while(threadsShouldLive){
-					loadPacketIntoAllOutgoingBuffers();
-				}
+				loadPacketIntoAllOutgoingBuffers();
 			}
 		});
 		stagingSendThread.start();
 		
+		systemMsgThread = new Thread(new Runnable() {
+			public void run() {
+				SystemMessageHandlerThreadMethod();
+			}
+		});
+		systemMsgThread.start();
+		
+		
+		
+		
+		
 		// @formatter:on
 		isRunning = true;
-	}
-
-	private boolean allThreadsClosed() {
-		boolean oneIsAlive = false;
-		oneIsAlive |= listeningThread.isAlive();
-		for (Socket socket : sockets.values()) {
-			oneIsAlive |= outThreads.get(socket).isAlive();
-			oneIsAlive |= inThreads.get(socket).isAlive();
-		}
-
-		// return true only when no thread was detected to be alive!
-		return !oneIsAlive;
 	}
 
 	private void listen() {
@@ -129,8 +138,11 @@ public class Server {
 					outStreams.put(newSocket, new ObjectOutputStream(newSocket.getOutputStream()));
 
 					// init buffers
-					sendBuffer.put(newSocket, new ConcurrentLinkedQueue<Packet>());
-					receiveBuffers.put(newSocket, new ConcurrentLinkedQueue<Packet>());
+					ConcurrentLinkedQueue<Packet> sendBuffer = new ConcurrentLinkedQueue<Packet>();
+					ConcurrentLinkedQueue<Packet> receiveBuffer = new ConcurrentLinkedQueue<Packet>();
+					sendBuffers.put(newSocket, sendBuffer);
+					receiveBuffers.put(newSocket, receiveBuffer);
+					sendBufferLocks.put(sendBuffer, false);
 
 					// init failure counts
 					sendFailures.put(newSocket, 0);
@@ -139,7 +151,7 @@ public class Server {
 					// launch a thread to receive from this socket @formatter:off
 					Thread sendThread = new Thread(new Runnable() {
 						public void run() {
-							send(newSocket);
+							sendThreadMethod(newSocket);
 						}
 					});
 					outThreads.put(newSocket, sendThread);
@@ -148,7 +160,7 @@ public class Server {
 					// launch a thread to broadcast from this socket
 					Thread receiveThread = new Thread(new Runnable() {
 						public void run() {
-							receive(newSocket);
+							receiveThreadMethod(newSocket);
 						}
 					});
 					inThreads.put(newSocket, receiveThread);
@@ -179,23 +191,25 @@ public class Server {
 					// if it fails to send for a set threshold
 				}
 			}
+			sleepForMS(1000); // TODO remove this when implemented.
 		}
 	}
 
-	private void receive(Socket fromSocket) {
+	private void receiveThreadMethod(Socket fromSocket) {
 		while (threadsShouldLive && threadShouldLive.get(fromSocket)) {
 			try {
 				ObjectInputStream inStream = inStreams.get(fromSocket);
 				Packet inbound = (Packet) inStream.readObject();
-				if (inbound != null) {
+				if (!checkForSystemMessage(inbound, fromSocket) && inbound != null) {
 					receiveBuffers.get(fromSocket).add(inbound);
 					hasReceived = true;
 				}
 				receiveFailures.put(fromSocket, 0);
+
 			} catch (ClassNotFoundException e) {
 				// cast error kill thread and pass exception
 				e.printStackTrace();
-				dropConnection(fromSocket);
+				dropConnection(fromSocket, true);
 				return;
 			} catch (SocketTimeoutException e) {
 				// Do nothing, but prevent this from being caught in IOException
@@ -211,17 +225,17 @@ public class Server {
 		}
 	}
 
-	private void send(Socket toSocket) {
+	private void sendThreadMethod(Socket toSocket) {
 		while (threadsShouldLive && threadShouldLive.get(toSocket)) {
 			try {
 				// peek what is to be sent, rather than removing from queue
-				Packet toSend = sendBuffer.get(toSocket).peek();
+				Packet toSend = sendBuffers.get(toSocket).peek();
 				if (toSend != null) {
 					outStreams.get(toSocket).writeObject(toSend);
 
 					// remove packet from buffer because exception was not
 					// thrown
-					sendBuffer.get(toSocket).poll();
+					sendBuffers.get(toSocket).poll();
 				}
 				sendFailures.put(toSocket, 0);
 			} catch (IOException e) {
@@ -235,6 +249,49 @@ public class Server {
 					return;
 				}
 				sleepForMS(failureSleepMSTime * failures);
+			}
+		}
+	}
+
+	private boolean checkForSystemMessage(Packet packet, Socket socket) {
+		if (packet instanceof SystemMessagePacket) {
+			loadSystemMessageJobToThread((SystemMessagePacket) packet, socket);
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Loads system packet so that it can be handled by the SystemMessageHandlerThread. Some
+	 * preprocessing of packet occurs. Packets are loaded into the SystemMessageHandlerThread to
+	 * prevent blocking of thread and deadlock.
+	 * 
+	 * For example, a receive thread can be deadlocked if it attempts to drop its own socket's
+	 * connection because the receive thread cannot end while it waits for dropConnection to
+	 * complete. dropConnection cannot complete because it waits for all receive threads to
+	 * terminate; thus the receive lower in the call stack that called drop connection will block
+	 * the completion of its own dropConnection call.
+	 * 
+	 * @param packet the packet to be added to the system message
+	 * @param socket the socket that sent the message.
+	 */
+	private void loadSystemMessageJobToThread(SystemMessagePacket packet, Socket socket) {
+		if (packet.connetionShouldClose()) {
+			// calling drop connection here will deadlock the receive thread
+			socketsForSystemToDrop.add(socket);
+		}
+	}
+
+	private void SystemMessageHandlerThreadMethod() {
+		while (threadsShouldLive) {
+			if (socketsForSystemToDrop.size() > 0) {
+				Socket socket = socketsForSystemToDrop.poll();
+				if (socket != null) {
+					dropConnection(socket, false);
+				}
+			} else {
+				// sleep thread
+				sleepForMS(10);
 			}
 		}
 	}
@@ -256,7 +313,7 @@ public class Server {
 		// Start the server running
 		new Thread(new Runnable() {
 			public void run() {
-				dropConnection(socketToDrop);
+				dropConnection(socketToDrop, true);
 			}
 		}).start();
 	}
@@ -268,10 +325,15 @@ public class Server {
 	 * 
 	 * @param socket the socket to be dropped.
 	 */
-	private void dropConnection(Socket socket) {
+	private void dropConnection(Socket socket, boolean sendDisconnectMessage) {
 		String socketStr = socket.toString();
 		String extraMsgs = " ";
-		System.out.println("Dropping connection" + socketStr);
+		System.out.println("Server: dropping connection " + socketStr);
+
+		// send disconnect message - blocks for max 5 seconds before moving on
+		if (sendDisconnectMessage) {
+			sendDisconnectMessageTo(socket);
+		}
 
 		// Flag threads associate with this socket to stop
 		if (threadShouldLive.put(socket, false) == null) {
@@ -285,7 +347,7 @@ public class Server {
 		while (threadsAliveFor(socket)) {
 			sleepForMS(100);
 			if (counter > 10000) {
-				throw new RuntimeException("dropConnection inifite loop - cannot kill thread");
+				throw new RuntimeException("Server: dropConnection inifite loop - cannot kill thread");
 			}
 			counter++;
 		}
@@ -299,7 +361,7 @@ public class Server {
 
 		// Threads are now dead - deallocate from most containers
 		sendFailures.remove(socket);
-		sendBuffer.remove(socket);
+		sendBuffers.remove(socket);
 		receiveFailures.remove(socket);
 		receiveBuffers.remove(socket);
 		inStreams.remove(socket);
@@ -308,8 +370,50 @@ public class Server {
 		inThreads.remove(socket);
 		outThreads.remove(socket);
 		sockets.remove(socket);
+		sendBufferLocks.remove(socket);
 
-		System.out.println("dropped: " + socketStr + extraMsgs);
+		System.out.println("\tServer: dropped " + socketStr + extraMsgs);
+	}
+
+	/**
+	 * Send a disconnect message to client and clear the send buffer to that client.
+	 * 
+	 * @SideEffect clears send buffer of the socket.
+	 * @param socket - the socket used to obtain the send buffer.
+	 */
+	private void sendDisconnectMessageTo(Socket socket) {
+		// get the sendBuffer that should be cleared
+		ConcurrentLinkedQueue<Packet> socketSendBuffer = sendBuffers.get(socket);
+
+		// lock all sending until the message is complete.
+		if (socketSendBuffer != null && sendBufferLocks.get(socketSendBuffer) != null) {
+			sendBufferLocks.put(socketSendBuffer, true);
+		} else {
+			// there isn't a lock for this socket
+			return;
+		}
+
+		// clear buffer - the disconnect message should be the first queued to send
+		socketSendBuffer.clear();
+
+		// create a system message that signals the client should shut down
+		SystemMessagePacket closeMessage = new SystemMessagePacket();
+		closeMessage.setConnectionShouldClose(true);
+
+		// add the system message to the normal send buffer
+		socketSendBuffer.add(closeMessage);
+
+		// record the start time in case the client is un-receptive and server needs to move on
+		long start = System.currentTimeMillis();
+
+		// wait 5 seconds or until the system message is sent to drop threads (or until msg set)
+		long delayMS = 5000;
+		while (socketSendBuffer.size() > 0 && System.currentTimeMillis() - start < delayMS) {
+			sleepForMS(1);
+		}
+
+		// unlock the sending
+		sendBufferLocks.put(socketSendBuffer, false);
 	}
 
 	private boolean threadsAliveFor(Socket socket) {
@@ -325,19 +429,13 @@ public class Server {
 		return ret;
 	}
 
-	private void resetAllStateVariables() {
-		// TODO still need to clean up hash maps
-		threadsShouldLive = true;
-	}
-
 	public void setPort(int port) {
 		this.port = port;
 	}
 
 	public void prepareServerToStart() throws IOException {
 		listener = new ServerSocket(port);
-
-		ready = true;
+		// ready = true; TODO: remove this if decide against logic approach
 	}
 
 	private void sleepForMS(long ms) {
@@ -358,19 +456,36 @@ public class Server {
 		// TODO finish developing this
 		threadsShouldLive = false;
 		for (Socket socket : sockets.values()) {
-			dropConnection(socket);
+			dropConnection(socket, true); // instead, use a common thread for dropping sockets
+			// socketsForSystemToDrop.add(socket);
 		}
 		try {
-			listener.close();
+			if (listener != null) {
+				listener.close();
+			}
 		} catch (IOException e) {
 			System.out.println("Failed to close listener");
 			e.printStackTrace();
 		}
+		// wait for the thread to drop all sockets before flagging isRunning to false
+		// TODO consider isRunning in favor of checking to see if server
+		// is still running by calling isRunning method.
+		// while (socketsForSystemToDrop.size() > 0) {
+		// sleepForMS(1);
+		// }
+		// once the connections are dropped, shut down the threads
+		// threadsShouldLive = false;
 		isRunning = false;
 	}
 
 	public boolean isRunning() {
-		return isRunning;
+		boolean ret = false;
+		if (listeningThread != null && sockets != null) {
+			ret |= listeningThread.isAlive();
+		}
+
+		// TODO remove variable isRunning and just have it calculated any time it is called
+		return isRunning || ret;
 	}
 
 	public boolean hasReceivedPacket() {
@@ -454,12 +569,22 @@ public class Server {
 	 * Simply loads 1 packet from the staged send packets to be sent over the server.
 	 */
 	private synchronized void loadPacketIntoAllOutgoingBuffers() {
-		if (stagedSendPackets.size() > 0) {
-			Packet packet = stagedSendPackets.poll();
-			for (ConcurrentLinkedQueue<Packet> buffer : sendBuffer.values()) {
-				buffer.add(packet.makeCopy());
+		while (threadsShouldLive) {
+			// system messages may lock send thread temporarily
+			if (stagedSendPackets.size() > 0) {
+				Packet packet = stagedSendPackets.poll();
+				for (ConcurrentLinkedQueue<Packet> buffer : sendBuffers.values()) {
+					boolean locked = sendBufferLocks.get(buffer);
+					if (!locked) {
+						buffer.add(packet.makeCopy());
+					}
+				}
 			}
 		}
+	}
+
+	public int activeConnections() {
+		return sockets.size();
 	}
 
 	public static void main(String[] args) throws UnknownHostException, InterruptedException {
@@ -512,5 +637,4 @@ public class Server {
 		kb.close();
 		server.disconnect();
 	}
-
 }

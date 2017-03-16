@@ -58,7 +58,7 @@ public class BasicTwoWayTest3_Server500packet_client500packet {
 	 * Testing that a the communication can be in two directions.
 	 */
 	@Test
-	public void testTwoWay3a_Connection5pkt() {
+	public void testTwoWay3a_Connection500pkt() {
 		// Long start = System.currentTimeMillis();
 		setUpServerAndClient();
 
@@ -70,7 +70,7 @@ public class BasicTwoWayTest3_Server500packet_client500packet {
 	}
 	
 	@Test
-	public void testTwoWay3b_Connection5pkt_3x() {
+	public void testTwoWay3b_Connection500pkt_3x() {
 		// Long start = System.currentTimeMillis();
 		setUpServerAndClient();
 
@@ -82,46 +82,6 @@ public class BasicTwoWayTest3_Server500packet_client500packet {
 		serverSend_500();
 	}
 	
-	@Test
-	public void testTwoWay3c_Connection5pkt_variablesends() {
-		// Long start = System.currentTimeMillis();
-		setUpServerAndClient();
-
-		clientSend_500();
-		serverSend_500();
-		clientSend_500();
-		serverSend_500();
-		clientSend_500();
-		serverSend_500();
-		
-		clientSend_500();
-		serverSend_500();
-		clientSend_500();
-		serverSend_500();
-		serverSend_500();
-		serverSend_500();
-		serverSend_500();
-		clientSend_500();
-		serverSend_500();
-		clientSend_500();
-		serverSend_500();
-		clientSend_500();
-		serverSend_500();
-		clientSend_500();
-		clientSend_500();
-		clientSend_500();
-		clientSend_500();
-		serverSend_500();
-		clientSend_500();
-		serverSend_500();
-		clientSend_500();
-		serverSend_500();
-		clientSend_500();
-		clientSend_500();
-		serverSend_500();
-		clientSend_500();
-		serverSend_500();
-	}
 
 	private void setUpServerAndClient() {
 		Long start = System.currentTimeMillis();
