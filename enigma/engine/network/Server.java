@@ -47,6 +47,7 @@ public class Server {
 	private long socketAliveCheckTimeoutMS = 30000;
 
 	private volatile boolean threadsShouldLive = true;
+	private volatile boolean listenForceShutdown = false;
 	// private int receiveFailureThreshold = 100;
 	private int sendFailureThreshold = 100;
 	private long failureSleepMSTime = 50;
@@ -79,7 +80,8 @@ public class Server {
 		}
 
 		threadsShouldLive = true;
-		listener = new ServerSocket(port);
+		listener = new ServerSocket(port); // throws IOException
+		listener.setSoTimeout(blockingTimeoutMS); // throws IOException
 
 		// start a continuously listening thread //@formatter:off
 		listeningThread = new Thread(new Runnable() {
@@ -119,12 +121,9 @@ public class Server {
 	}
 
 	private void listen() {
-		while (threadsShouldLive) {
+		while (threadsShouldLive && !listener.isClosed()) {
 			if (sockets.size() < maxPlayers - 1) {
 				try {
-					// TODO concern: add timeout to listener so that thread may
-					// shut down?
-					listener.setSoTimeout(5000);
 					final Socket newSocket = listener.accept();
 
 					newSocket.setSoTimeout(blockingTimeoutMS);
@@ -170,8 +169,12 @@ public class Server {
 				} catch (SocketTimeoutException e) {
 					// timeout event is normal
 				} catch (IOException e) {
-					System.out.println("Failed to accept socket - IO Exception");
-					e.printStackTrace();
+					// when listener is closed will accepting, throws an exception.
+					// the below flag is set so that an error message isn't printed.
+					if (!listenForceShutdown) {
+						System.out.println("Failed to accept socket - IO Exception");
+						e.printStackTrace();
+					}
 				}
 			}
 		}
@@ -454,12 +457,14 @@ public class Server {
 	 */
 	public void disconnect() {
 		// TODO finish developing this
-		threadsShouldLive = false;
+		// threadsShouldLive = false;
 		for (Socket socket : sockets.values()) {
-			dropConnection(socket, true); // instead, use a common thread for dropping sockets
-			// socketsForSystemToDrop.add(socket);
+			// dropConnection(socket, true); // instead, use a common thread for dropping sockets
+			socketsForSystemToDrop.add(socket);
 		}
 		try {
+			//below is a flag to prevent listen thread for printing exception msg
+			listenForceShutdown = true;
 			if (listener != null) {
 				listener.close();
 			}
@@ -470,11 +475,13 @@ public class Server {
 		// wait for the thread to drop all sockets before flagging isRunning to false
 		// TODO consider isRunning in favor of checking to see if server
 		// is still running by calling isRunning method.
-		// while (socketsForSystemToDrop.size() > 0) {
-		// sleepForMS(1);
-		// }
+		while (socketsForSystemToDrop.size() > 0) {
+			sleepForMS(1);
+		}
 		// once the connections are dropped, shut down the threads
-		// threadsShouldLive = false;
+		threadsShouldLive = false;
+		listenForceShutdown = false;
+
 		isRunning = false;
 	}
 
