@@ -28,6 +28,7 @@ public class Server {
 	private Thread socketValidationThread;
 	private Thread systemMsgThread;
 	private ConcurrentHashMap<Integer, Socket> sockets = new ConcurrentHashMap<Integer, Socket>();
+	private volatile int activeSockets = 0; // This value has potential to be concurrent bottleneck
 	private ConcurrentHashMap<Socket, Thread> outThreads = new ConcurrentHashMap<Socket, Thread>();
 	private ConcurrentHashMap<Socket, Thread> inThreads = new ConcurrentHashMap<Socket, Thread>();
 	private Thread stagingSendThread;
@@ -122,7 +123,7 @@ public class Server {
 
 	private void listen() {
 		while (threadsShouldLive && !listener.isClosed()) {
-			if (sockets.size() < maxPlayers - 1) {
+			if (activeSockets < maxPlayers - 1) {
 				try {
 					final Socket newSocket = listener.accept();
 
@@ -164,6 +165,7 @@ public class Server {
 					});
 					inThreads.put(newSocket, receiveThread);
 					receiveThread.start();
+					activeSockets++;
 
 					// @formatter:on
 				} catch (SocketTimeoutException e) {
@@ -287,10 +289,11 @@ public class Server {
 
 	private void SystemMessageHandlerThreadMethod() {
 		while (threadsShouldLive) {
-			if (socketsForSystemToDrop.size() > 0) {
-				Socket socket = socketsForSystemToDrop.poll();
-				if (socket != null) {
-					dropConnection(socket, false);
+			//since ConcurrentQueue.size() is O(n), just poll and check if non-null head
+			Socket dropSocket = socketsForSystemToDrop.poll();
+			if(dropSocket != null){
+				if (dropSocket != null) {
+					dropConnection(dropSocket, false);
 				}
 			} else {
 				// sleep thread
@@ -374,6 +377,7 @@ public class Server {
 		outThreads.remove(socket);
 		sockets.remove(socket);
 		sendBufferLocks.remove(socket);
+		activeSockets--;
 
 		System.out.println("\tServer: dropped " + socketStr + extraMsgs);
 	}
@@ -411,7 +415,7 @@ public class Server {
 
 		// wait 5 seconds or until the system message is sent to drop threads (or until msg set)
 		long delayMS = 5000;
-		while (socketSendBuffer.size() > 0 && System.currentTimeMillis() - start < delayMS) {
+		while (socketSendBuffer.peek() != null && System.currentTimeMillis() - start < delayMS) {
 			sleepForMS(1);
 		}
 
@@ -463,7 +467,7 @@ public class Server {
 			socketsForSystemToDrop.add(socket);
 		}
 		try {
-			//below is a flag to prevent listen thread for printing exception msg
+			// below is a flag to prevent listen thread for printing exception msg
 			listenForceShutdown = true;
 			if (listener != null) {
 				listener.close();
@@ -496,7 +500,7 @@ public class Server {
 	}
 
 	public boolean hasReceivedPacket() {
-		return hasReceived || stagedReceivePackets.size() > 0;
+		return hasReceived || stagedReceivePackets.peek() != null;
 	}
 
 	private ArrayList<Socket> keys = new ArrayList<Socket>();
@@ -590,8 +594,19 @@ public class Server {
 		}
 	}
 
+	/**
+	 * This method should be used sparingly because it has the potential to cause bottlenecks
+	 * during the server listening thread and server disconnecting threads.
+	 * @return The atomic number of current active sockets. 
+	 */
 	public int activeConnections() {
-		return sockets.size();
+		//the ConcurrentHashMap doesn't have an atomic size() method. In fact, it often returns
+		//an invalid number. This is because having such a method could cause a concurrent bottle neck
+		//and since the size() method isn't thought to be very important for concurrent problems,
+		//the implementation may return stale values to prevent concurrent bottlenecks.
+		//
+		//My implementation requires a valid size, so I have created my own atomic variable to track size
+		return activeSockets;
 	}
 
 	public static void main(String[] args) throws UnknownHostException, InterruptedException {
