@@ -188,6 +188,9 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 			network.clientMode();
 		}
 		try {
+			String ip = networkMenu.getIP();
+			System.out.println("Connecting to: " + ip);
+			network.setAddress(ip);
 			network.run();
 		} catch (IOException | FailedToConnect e) {
 			e.printStackTrace();

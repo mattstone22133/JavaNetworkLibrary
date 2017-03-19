@@ -38,7 +38,7 @@ public class TestServerPublicMethods {
 		client.disconnect();
 		TestTools.sleepForMS(500);
 		int counter = 0;
-		while ((server.isRunning() || client.isRunning() && counter < 10)) {
+		while ((server.isRunning() || client.isRunning()) && counter < 10) {
 			TestTools.sleepForMS(500);
 			counter++;
 		}
@@ -74,7 +74,7 @@ public class TestServerPublicMethods {
 		
 		// ---- test that isRunning eventually terminates
 		long start = System.currentTimeMillis();
-		while(server.isRunning() || Math.abs(start - System.currentTimeMillis()) > 1000){
+		while(server.isRunning() && System.currentTimeMillis() - start < 1000){
 			TestTools.sleepForMS(10);
 		}
 		assertTrue("Server should have disconnected within 1 second of disconnect call", !server.isRunning());
@@ -86,8 +86,13 @@ public class TestServerPublicMethods {
 			System.out.println("failed to start server running again");
 		}
 		testIsRunningQuicklyAfterDisconnectWithClient();
+		start = System.currentTimeMillis();
+		long delayMS = 1000;
 		while(server.isRunning()){
 			TestTools.sleepForMS(10);
+			if(System.currentTimeMillis() - start > delayMS){
+				fail(String.format("server was running after disconnect call for more than %dms.", delayMS));
+			}
 		}
 
 
@@ -96,14 +101,14 @@ public class TestServerPublicMethods {
 	}
 
 	private void testIsRunningQuicklyAfterDisconnectWithClient() {
-		//connect a client first
+		// connect a client first
 		try {
 			client.connect(InetAddress.getLocalHost().getHostAddress(), listenPort);
 		} catch (Exception e) {
 			fail("failed to connect a client when trying to test server");
 		}
 		testIsRunningQuicklyAfterDisconnect();
-		client.disconnect();//not trying to test client methods here.
+		client.disconnect();// not trying to test client methods here.
 	}
 
 	private void testIsRunningQuicklyAfterDisconnect() {
@@ -116,14 +121,13 @@ public class TestServerPublicMethods {
 			fail("could not find the listening thread field");
 		}
 		server.disconnect();
-		//must hope that this reached before listening thread ends its timeout and stops its loop.
-		if(listenThread.isAlive()){
+		// must hope that this reached before listening thread ends its timeout and stops its loop.
+		if (listenThread.isAlive()) {
 			assertTrue("server hasn't stopped listening thread, but isRunning returns false", server.isRunning());
 		} else {
 			System.out.println("listen thread ended before test reached if statement to test isRunning");
 			System.out.println("Advise: re-running test to catch this scenario.");
 		}
 	}
-	
-	
+
 }

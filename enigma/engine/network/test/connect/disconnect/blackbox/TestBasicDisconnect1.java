@@ -6,6 +6,8 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -29,6 +31,7 @@ public class TestBasicDisconnect1 {
 			client = new Client();
 			server = new Server(listenPort);
 			address = InetAddress.getLocalHost().getHostAddress();
+
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println();
@@ -134,7 +137,7 @@ public class TestBasicDisconnect1 {
 		// sleep so server has time to remove the socket connection
 		long delay = 1000;
 		long start = System.currentTimeMillis();
-		while (server.activeConnections() != 0 && System.currentTimeMillis() - start > delay) {
+		while (server.activeConnections() != 0 && System.currentTimeMillis() - start < delay) {
 			TestTools.sleepForMS(100);
 		}
 		cntNum = server.activeConnections();
@@ -142,8 +145,83 @@ public class TestBasicDisconnect1 {
 	}
 
 	@Test
+	public void testServerNotifiesClientOfUpcomingDisconnect() throws IOException, FailedToConnect {
+		// create the 5 clients
+		Client client1 = client;
+		client.verbose = true;
+		Client client2 = new Client();
+		Client client3 = new Client();
+		Client client4 = new Client();
+		Client client5 = new Client();
+
+		// start the server
+		server.disconnect();
+		while (server.isRunning()) {
+			// wait for disconnect
+			TestTools.sleepForMS(100);
+		}
+		server.run();
+
+		// connect the clients
+		client1.connect(address, listenPort);
+		TestTools.sleepForMS(10);
+		client2.connect(address, listenPort);
+		TestTools.sleepForMS(10);
+		client3.connect(address, listenPort);
+		TestTools.sleepForMS(10);
+		client4.connect(address, listenPort);
+		TestTools.sleepForMS(10);
+		client5.connect(address, listenPort);
+
+		// test that server has registered 5 connections (within 1 second)
+		makeServerWaitForNumConnections(5, 1000);
+		int connectedClient = server.activeConnections();
+		assertEquals("server doesn't state 5 connected clients, instead", 5, connectedClient);
+
+		// disconnect server and see if clients disconnect due to a server disconnect message
+		server.disconnect();
+
+		// give the server 1 second to to disconnect all connections
+		waitForServerToDisconnectOrXseconds(1000);
+
+		// give clients 1 second to receive and act on disconnect system message
+		long start = System.currentTimeMillis();
+		long delayMS = 1500;
+		while ((client1.isRunning() || client2.isRunning() || client3.isRunning() || client4.isRunning() || client5.isRunning()) && System.currentTimeMillis() - start < delayMS) {
+			TestTools.sleepForMS(1);
+		}
+		
+		//capture the current state of each client
+		boolean client1Disconnected = !client1.isRunning();
+		boolean client2Disconnected = !client2.isRunning();
+		boolean client3Disconnected = !client3.isRunning();
+		boolean client4Disconnected = !client4.isRunning();
+		boolean client5Disconnected = !client5.isRunning();
+		
+		//disconnect clients in case test fails, otherwise next test will throw exception.
+		client1.disconnect();
+		client2.disconnect();
+		client3.disconnect();
+		client4.disconnect();
+		client5.disconnect();
+		
+		assertTrue("client 1 still running after ~1.5sec and disconnect", client1Disconnected);
+		assertTrue("client 2 still running after ~1.5sec and disconnect", client2Disconnected);
+		assertTrue("client 3 still running after ~1.5sec and disconnect", client3Disconnected);
+		assertTrue("client 4 still running after ~1.5sec and disconnect", client4Disconnected);
+		assertTrue("client 5 still running after ~1.5sec and disconnect", client5Disconnected);
+
+		client1.verbose = false;
+	}
+
+	@Test
 	public void test5ClientsConnecting() throws IOException, FailedToConnect {
-		// creat the 5 clients
+		connect5();
+		connect5();
+	}
+
+	public void connect5() throws FailedToConnect, IOException {
+		// create the 5 clients
 		Client client1 = client;
 		Client client2 = new Client();
 		Client client3 = new Client();
@@ -157,6 +235,7 @@ public class TestBasicDisconnect1 {
 			TestTools.sleepForMS(100);
 		}
 		server.run();
+		makeServerWaitForNumConnections(0, 300);
 		// if (!server.isRunning()) server.run();
 
 		client1.connect(address, listenPort);
@@ -169,6 +248,10 @@ public class TestBasicDisconnect1 {
 		TestTools.sleepForMS(10);
 		client5.connect(address, listenPort);
 
+		// make server send each client a packet
+		server.queueToSend(new DemoConcretePacket(10, 0, 0, 0));
+
+		// have the client's send the server packets
 		System.out.println("preparing to send 5 packets");
 		boolean[] receivedPackets = new boolean[5];
 		client1.queueToSend(new DemoConcretePacket(1, 0, 0, 0));
@@ -178,6 +261,8 @@ public class TestBasicDisconnect1 {
 		client5.queueToSend(new DemoConcretePacket(5, 0, 0, 0));
 		System.out.println("5 packets sent");
 
+		// test that server has registered 5 connections
+		makeServerWaitForNumConnections(5, 1000);
 		int connectedClient = server.activeConnections();
 		assertEquals("server doesn't state 5 connected clients, instead", 5, connectedClient);
 
@@ -198,6 +283,19 @@ public class TestBasicDisconnect1 {
 		// test that all packets were received and reset the variables back to false
 		for (int i = 0; i < receivedPackets.length; ++i) {
 			assertTrue("did not receive packet: " + i, receivedPackets[i]);
+			receivedPackets[i] = false;
+		}
+
+		// test that each client received a server packet
+		ArrayList<Client> clients = new ArrayList<Client>(Arrays.asList(client1, client2, client3, client4, client5));
+		for (int i = 0; i < clients.size(); ++i) {
+			client = clients.get(i);
+			if (client.hasReceivedPacket()) {
+				DemoConcretePacket packet = (DemoConcretePacket) client.getNextReceivedPacket();
+				assertEquals("client's received packet didn't match what server sent", 10, packet.getId());
+			} else {
+				fail("a client did not receive a packet from the server.");
+			}
 		}
 
 		client1.disconnect();
@@ -205,17 +303,41 @@ public class TestBasicDisconnect1 {
 		client3.disconnect();
 		client4.disconnect();
 		client5.disconnect();
-		// TODO: in CLIENT AND SERVER change all buffers to test if head is null, rather than using
-		// size()
-		fail("in CLIENT AND SERVER change all buffers to test if head is null, rather than using size()");
-		fail("implementation is not complete");
+
+		long delayMS = 1000;
+		start = System.currentTimeMillis();
+		while ((client1.isRunning() || client2.isRunning() || client3.isRunning() || client4.isRunning() || client5.isRunning()) && System.currentTimeMillis() - start < delayMS) {
+			TestTools.sleepForMS(1);
+		}
+		assertTrue("client 1 still running after 1sec and disconnect", !client1.isRunning());
+		assertTrue("client 2 still running after 1sec and disconnect", !client2.isRunning());
+		assertTrue("client 3 still running after 1sec and disconnect", !client3.isRunning());
+		assertTrue("client 4 still running after 1sec and disconnect", !client4.isRunning());
+		assertTrue("client 5 still running after 1sec and disconnect", !client5.isRunning());
+
+		// give server at maximum 1 seconds to drop all connections
+		makeServerWaitForNumConnections(0, 1000);
+		int servConnections = server.activeConnections();
+
+		assertEquals(String.format("Server had %d connections, not 0", servConnections), 0, servConnections);
 	}
 
-	@Test
-	public void testThatDisconnectMessageReceivedExplicitly() {
-		// note: this is really tested with the first three tests.
-		// may drop this test.
-		fail("not implemented");
+	public void makeServerWaitForNumConnections(int number, int delayMS) {
+		int servConnections = server.activeConnections();
+		// give server at maximum 1 seconds to drop all connections
+		long start = System.currentTimeMillis();
+		while (servConnections != 0 && System.currentTimeMillis() - start < delayMS) {
+			TestTools.sleepForMS(1);
+			servConnections = server.activeConnections();
+		}
+	}
+
+	public void waitForServerToDisconnectOrXseconds(int delayMS) {
+		// give server at maximum 1 seconds to drop all connections
+		long start = System.currentTimeMillis();
+		while (server.isRunning() && System.currentTimeMillis() - start < delayMS) {
+			TestTools.sleepForMS(1);
+		}
 	}
 
 	public void startServer() {

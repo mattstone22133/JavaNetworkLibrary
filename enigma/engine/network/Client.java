@@ -34,7 +34,7 @@ public class Client {
 	private volatile boolean threadsShouldLive = true;
 	private int blockingTimeoutMS = 1000;
 	private int sendSleepDelay;
-	private boolean verbose = false;
+	public boolean verbose = false;
 
 	// reconnection
 	int sendFailures = 0;
@@ -161,8 +161,8 @@ public class Client {
 	public void sendingThreadMethod() {
 		// Only this method should ever do peeks and polls from the sendBuffer;
 		while (threadsShouldLive) {
-			if (sendBuffer.size() > 0) {
-				Packet toSend = sendBuffer.peek();
+			Packet toSend = sendBuffer.peek();
+			if (toSend != null) {
 				try {
 					send(toSend);
 					sendBuffer.poll();
@@ -268,6 +268,8 @@ public class Client {
 	 * A non-blocking disconnect.
 	 */
 	public void disconnect() {
+		if(!isRunning()) return;
+		
 		// launch disconnect in new thread to prevent blocking for user.
 		Thread disconnectThread = new Thread(new Runnable() {
 			public void run() {
@@ -295,10 +297,10 @@ public class Client {
 		closeMessage.setConnectionShouldClose(true);
 		sendBuffer.add(closeMessage);
 
-		// loop until message sent (send buffer == 0) or 5 seconds is up
+		// loop until message sent (send buffer == 0; ie null head) or 5 seconds is up
 		long start = System.currentTimeMillis();
 		long delayMS = 5000; // if changed update java doc TODO - this will block user!
-		while (sendBuffer.size() > 0 && System.currentTimeMillis() - start < delayMS) {
+		while (sendBuffer.peek() != null && System.currentTimeMillis() - start < delayMS) {
 			sleepThread(1);
 		}
 
@@ -310,7 +312,7 @@ public class Client {
 	// public boolean isConnected() {
 	// boolean tcpIsConnected = false;
 	// if (TCPSocket != null) {
-	// tcpIsConnected = TCPSocket.isClosed();
+	// tcpIsConnected = TCPSocket.isClosed(); 
 	// }
 	// return tcpIsConnected && inStream != null && outStream != null;
 	// }
@@ -331,7 +333,7 @@ public class Client {
 	protected void loadStagedPacketToOutGoing() {
 		while (threadsShouldLive) {
 			// use "if" instead of "while" so that threadsShouldLive checked every loading iter
-			if (stageForSendBuffer.size() > 0 && !sendBufferLock) {
+			if (stageForSendBuffer.peek() != null && !sendBufferLock) {
 				Packet toSend = stageForSendBuffer.poll();
 				sendBuffer.add(toSend);
 			}
@@ -363,7 +365,7 @@ public class Client {
 	}
 
 	public boolean hasReceivedPacket() {
-		return receiveBuffer.size() > 0;
+		return receiveBuffer.peek() != null;
 	}
 
 	public Packet getNextReceivedPacket() {

@@ -40,7 +40,7 @@ public class Server {
 	private ConcurrentHashMap<Socket, Integer> sendFailures = new ConcurrentHashMap<Socket, Integer>();
 	private ConcurrentHashMap<Socket, Boolean> threadShouldLive = new ConcurrentHashMap<Socket, Boolean>();
 	private ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean> sendBufferLocks = new ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean>();
-	private ConcurrentLinkedQueue<Socket> socketsForSystemToDrop = new ConcurrentLinkedQueue<Socket>();
+	private ConcurrentLinkedQueue<SocketMessagePair> socketsForSystemToDrop = new ConcurrentLinkedQueue<SocketMessagePair>();
 
 	private int port;
 	private short maxPlayers = 8;
@@ -112,10 +112,6 @@ public class Server {
 			}
 		});
 		systemMsgThread.start();
-		
-		
-		
-		
 		
 		// @formatter:on
 		isRunning = true;
@@ -283,18 +279,37 @@ public class Server {
 	private void loadSystemMessageJobToThread(SystemMessagePacket packet, Socket socket) {
 		if (packet.connetionShouldClose()) {
 			// calling drop connection here will deadlock the receive thread
-			socketsForSystemToDrop.add(socket);
+			// socketsForSystemToDrop.add(socket);
+
+			// do not send a drop message since the client alerted server of intent of dropping
+			socketsForSystemToDrop.add(new SocketMessagePair(socket, false));
+		}
+	}
+
+	/**
+	 * Alerts dropping thread whether the socket should be dropped and whether a "disconnect"
+	 * message is to be sent.
+	 * 
+	 * @author Matt Stone
+	 */
+	private class SocketMessagePair {
+		public final boolean dropMessage;
+		public final Socket socket;
+
+		SocketMessagePair(Socket socket, boolean dropMessage) {
+			this.socket = socket;
+			this.dropMessage = dropMessage;
 		}
 	}
 
 	private void SystemMessageHandlerThreadMethod() {
 		while (threadsShouldLive) {
-			//since ConcurrentQueue.size() is O(n), just poll and check if non-null head
-			Socket dropSocket = socketsForSystemToDrop.poll();
-			if(dropSocket != null){
-				if (dropSocket != null) {
-					dropConnection(dropSocket, false);
-				}
+			// since ConcurrentQueue.size() is O(n), just poll and check if non-null head
+			SocketMessagePair pair = socketsForSystemToDrop.poll();
+
+			// Socket dropSocket = socketsForSystemToDrop.poll();
+			if (pair != null && pair.socket != null) {
+				dropConnection(pair.socket, pair.dropMessage);
 			} else {
 				// sleep thread
 				sleepForMS(10);
@@ -460,11 +475,14 @@ public class Server {
 	 * they should close.
 	 */
 	public void disconnect() {
+		// below needed to prevent infinite loops on multiple calls to disconnect
+		if (!isRunning()) return;
+
 		// TODO finish developing this
 		// threadsShouldLive = false;
 		for (Socket socket : sockets.values()) {
-			// dropConnection(socket, true); // instead, use a common thread for dropping sockets
-			socketsForSystemToDrop.add(socket);
+			// socketsForSystemToDrop.add(socket);
+			socketsForSystemToDrop.add(new SocketMessagePair(socket, true));
 		}
 		try {
 			// below is a flag to prevent listen thread for printing exception msg
@@ -479,7 +497,8 @@ public class Server {
 		// wait for the thread to drop all sockets before flagging isRunning to false
 		// TODO consider isRunning in favor of checking to see if server
 		// is still running by calling isRunning method.
-		while (socketsForSystemToDrop.size() > 0) {
+		// while (socketsForSystemToDrop.size() > 0) {
+		while (socketsForSystemToDrop.peek() != null) {
 			sleepForMS(1);
 		}
 		// once the connections are dropped, shut down the threads
@@ -513,10 +532,12 @@ public class Server {
 	 * If collections were to be iterated while still being updated, then sockets that were accessed
 	 * later may have newer packets than earlier accessed sockets.
 	 * 
-	 * This method will not stage more packets until
+	 * This method will not stage more packets until the previously staged packets have been
+	 * handled.
 	 */
 	public void stageReceivedPacketsForRemoval() {
-		if (stagedReceivePackets.size() > 0) {
+		// if there are still packets staged, then simply return.
+		if (stagedReceivePackets.peek() != null) {
 			return;
 		}
 		keys.clear();
@@ -528,6 +549,7 @@ public class Server {
 			keys.add(enumKeys.nextElement());
 		}
 		for (Socket socket : keys) {
+			// size() is O(n) and implementation should produce non-stale value
 			queueSizes.put(socket, receiveBuffers.get(socket).size());
 		}
 		// sizes recorded; only polling stage #packets of those sizes
@@ -546,7 +568,7 @@ public class Server {
 	}
 
 	public boolean hasStagedPackets() {
-		return stagedReceivePackets.size() > 0;
+		return stagedReceivePackets.peek() != null;
 	}
 
 	public Packet getNextStagedPacket() {
@@ -582,7 +604,7 @@ public class Server {
 	private synchronized void loadPacketIntoAllOutgoingBuffers() {
 		while (threadsShouldLive) {
 			// system messages may lock send thread temporarily
-			if (stagedSendPackets.size() > 0) {
+			if (stagedSendPackets.peek() != null) {
 				Packet packet = stagedSendPackets.poll();
 				for (ConcurrentLinkedQueue<Packet> buffer : sendBuffers.values()) {
 					boolean locked = sendBufferLocks.get(buffer);
@@ -595,17 +617,20 @@ public class Server {
 	}
 
 	/**
-	 * This method should be used sparingly because it has the potential to cause bottlenecks
-	 * during the server listening thread and server disconnecting threads.
-	 * @return The atomic number of current active sockets. 
+	 * This method should be used sparingly because it has the potential to cause bottlenecks during
+	 * the server listening thread and server disconnecting threads.
+	 * 
+	 * @return The atomic number of current active sockets.
 	 */
 	public int activeConnections() {
-		//the ConcurrentHashMap doesn't have an atomic size() method. In fact, it often returns
-		//an invalid number. This is because having such a method could cause a concurrent bottle neck
-		//and since the size() method isn't thought to be very important for concurrent problems,
-		//the implementation may return stale values to prevent concurrent bottlenecks.
+		// the ConcurrentHashMap doesn't have an atomic size() method. It recalculates the list size
+		// everytime it is called. This is because having a atomic int for size could cause a
+		// concurrent bottle neck and since the size() method isn't thought to be very important for
+		// concurrent problems, is built in this way. the size() method with ConcurrentHashMaps can
+		// even return old stale values.
 		//
-		//My implementation requires a valid size, so I have created my own atomic variable to track size
+		// My implementation requires a valid size, so I have created my own atomic variable to
+		// track size
 		return activeSockets;
 	}
 

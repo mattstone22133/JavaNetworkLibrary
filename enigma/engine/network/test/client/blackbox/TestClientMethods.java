@@ -57,7 +57,7 @@ public class TestClientMethods {
 		client.disconnect();
 		TestTools.sleepForMS(500);
 		int counter = 0;
-		while ((server.isRunning() || client.isRunning() && counter < 10)) {
+		while ((server.isRunning() || client.isRunning()) && counter < 10) {
 			TestTools.sleepForMS(500);
 			counter++;
 		}
@@ -72,12 +72,21 @@ public class TestClientMethods {
 		assertTrue("client should not be connected!", client.isRunning());
 
 		// ---- Test when server disconnects ----//
+		long start = System.currentTimeMillis();
+		long delayMS = 1000;
+		while(client.isRunning() && System.currentTimeMillis() - start < delayMS){
+			TestTools.sleepForMS(1);
+		}
 		connectClient("testIsConnected");
 		server.disconnect();
 		// give the server a maximum of 1 second to shut down
-		long start = System.currentTimeMillis();
-		while (server.isRunning() || Math.abs(start - System.currentTimeMillis()) > 1000) {
+		start = System.currentTimeMillis();
+		while (server.isRunning() && System.currentTimeMillis() - start < delayMS ) {
 			TestTools.sleepForMS(10);
+		}
+		start = System.currentTimeMillis();
+		while(client.isRunning() && System.currentTimeMillis() - start < delayMS){
+			TestTools.sleepForMS(1);
 		}
 		assertTrue("Dependency on Server failure - Server should have disconnected within 1 second of disconnect call", !server.isRunning());
 		assertTrue("Server shut down, client should sigal that it isn't connected", !client.isRunning());

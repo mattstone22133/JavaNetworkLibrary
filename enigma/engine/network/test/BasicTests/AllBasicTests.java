@@ -1,4 +1,4 @@
-package enigma.engine.network.test.BasicTests;
+package enigma.engine.network.test.basictests;
 
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
