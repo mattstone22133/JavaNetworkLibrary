@@ -39,8 +39,12 @@ public class Server {
 	private ConcurrentHashMap<Socket, Integer> receiveFailures = new ConcurrentHashMap<Socket, Integer>();
 	private ConcurrentHashMap<Socket, Integer> sendFailures = new ConcurrentHashMap<Socket, Integer>();
 	private ConcurrentHashMap<Socket, Boolean> threadShouldLive = new ConcurrentHashMap<Socket, Boolean>();
+	private ConcurrentHashMap<Socket, Character> ID = new ConcurrentHashMap<Socket, Character>();
 	private ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean> sendBufferLocks = new ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean>();
 	private ConcurrentLinkedQueue<SocketMessagePair> socketsForSystemToDrop = new ConcurrentLinkedQueue<SocketMessagePair>();
+	private IDManager idManager;
+	private Character hostID = null;
+	private Character nextID = null;
 
 	private int port;
 	private short maxPlayers = 8;
@@ -64,8 +68,24 @@ public class Server {
 	private boolean pingSocketsPeriodically = false;
 
 	public Server(int port) {
+		this(port, (short) 8, true);
+	}
+
+	public Server(int port, short maxPlayers, boolean createPlayerForHost) {
 		this.port = port;
+		setMaxPlayers(maxPlayers);
+		idManager = new IDManager(maxPlayers);
+		if (createPlayerForHost) {
+			hostID = idManager.getReservedIDAndRemoveFromIDPool();
+		}
 		// ready = true; //TODO remove this if decide against this logic approach
+	}
+
+	private void setMaxPlayers(short newMax) {
+		if (newMax <= 2) {
+			newMax = 2;
+		}
+		this.maxPlayers = newMax;
 	}
 
 	/**
@@ -119,19 +139,33 @@ public class Server {
 
 	private void listen() {
 		while (threadsShouldLive && !listener.isClosed()) {
-			if (activeSockets < maxPlayers - 1) {
+			if (nextID == null) {
+				// prepare the ID for the next connection
+				nextID = idManager.getReservedIDAndRemoveFromIDPool();
+			}
+
+			if (activeSockets < maxPlayers - 1 && nextID != null) {
 				try {
+					// listen for socket - timeout exception will occur if no connection (will loop
+					// back)
 					final Socket newSocket = listener.accept();
 
+					// conduct all activity that will cause exceptions, before adding to hashmaps
 					newSocket.setSoTimeout(blockingTimeoutMS);
 
-					// save socket reference into hashmap
-					sockets.put(newSocket.hashCode(), newSocket);
+					// init streams
+					ObjectInputStream objInStream = new ObjectInputStream(newSocket.getInputStream());
+					ObjectOutputStream objOutStream = new ObjectOutputStream(newSocket.getOutputStream());
+
+					// activity that won't throw network/io exceptions - safe to add to class fields
 					threadShouldLive.put(newSocket, true);
 
-					// init streams
-					inStreams.put(newSocket, new ObjectInputStream(newSocket.getInputStream()));
-					outStreams.put(newSocket, new ObjectOutputStream(newSocket.getOutputStream()));
+					// save socket reference into container (doesn't have to be a hashmap)
+					sockets.put(newSocket.hashCode(), newSocket);
+
+					// store streams
+					inStreams.put(newSocket, objInStream);
+					outStreams.put(newSocket, objOutStream);
 
 					// init buffers
 					ConcurrentLinkedQueue<Packet> sendBuffer = new ConcurrentLinkedQueue<Packet>();
@@ -139,6 +173,10 @@ public class Server {
 					sendBuffers.put(newSocket, sendBuffer);
 					receiveBuffers.put(newSocket, receiveBuffer);
 					sendBufferLocks.put(sendBuffer, false);
+
+					// handle ID creation (and set up for next)
+					ID.put(newSocket, nextID);
+					nextID = idManager.getReservedIDAndRemoveFromIDPool();
 
 					// init failure counts
 					sendFailures.put(newSocket, 0);
@@ -174,6 +212,8 @@ public class Server {
 						e.printStackTrace();
 					}
 				}
+			} else {
+				sleepForMS(1);
 			}
 		}
 	}
@@ -379,6 +419,7 @@ public class Server {
 			e.printStackTrace();
 			System.out.println("failed to close socket");
 		}
+		idManager.unReserveIDAndReturnIdToPool(ID.get(socket));
 
 		// Threads are now dead - deallocate from most containers
 		sendFailures.remove(socket);
@@ -392,6 +433,7 @@ public class Server {
 		outThreads.remove(socket);
 		sockets.remove(socket);
 		sendBufferLocks.remove(socket);
+		ID.remove(socket);
 		activeSockets--;
 
 		System.out.println("\tServer: dropped " + socketStr + extraMsgs);

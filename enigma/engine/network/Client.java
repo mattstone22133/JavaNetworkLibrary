@@ -35,6 +35,8 @@ public class Client {
 	private int blockingTimeoutMS = 1000;
 	private int sendSleepDelay;
 	public boolean verbose = false;
+	
+	private NetworkPlayer localPlayerInstance = null;
 
 	// reconnection
 	int sendFailures = 0;
@@ -197,6 +199,10 @@ public class Client {
 			// for example, maybe require a counter of 3 disconnect packets.
 			if (verbose) System.out.println("received disconnect syste message");
 			disconnect(false);
+		} else {
+			if(systemMessage.containsPlayerID()){
+				localPlayerInstance = new NetworkPlayer(systemMessage.getPlayerID());
+			}
 		}
 	}
 
@@ -248,6 +254,7 @@ public class Client {
 		}
 		//kill threads after the message to system has been sent
 		threadsShouldLive = false;
+		localPlayerInstance = null;
 
 		try {
 			if (TCPSocket != null) {
