@@ -12,4 +12,8 @@ public class NetworkPlayer {
 	protected NetworkPlayer(char assignedID) {
 		this.playerID = assignedID;
 	}
+	
+	public char getID(){
+		return playerID;
+	}
 }

@@ -35,7 +35,7 @@ public class Client {
 	private int blockingTimeoutMS = 1000;
 	private int sendSleepDelay;
 	public boolean verbose = false;
-	
+
 	private NetworkPlayer localPlayerInstance = null;
 
 	// reconnection
@@ -139,7 +139,9 @@ public class Client {
 	protected void receivingThreadMethod() {
 		while (threadsShouldLive) {
 			try {
-				Packet inbound = (Packet) inStream.readObject();
+				// Packet inbound = (Packet) inStream.readObject(); //saves reference to packet
+				Packet inbound = (Packet) inStream.readUnshared();  //doesn't save ref to packet
+				
 				if (!checkForSystemMessage(inbound) && inbound != null) {
 					// not a system message, add the packet to buffer
 					receiveBuffer.add(inbound);
@@ -160,7 +162,7 @@ public class Client {
 		}
 	}
 
-	public void sendingThreadMethod() {
+	private void sendingThreadMethod() {
 		// Only this method should ever do peeks and polls from the sendBuffer;
 		while (threadsShouldLive) {
 			Packet toSend = sendBuffer.peek();
@@ -200,7 +202,7 @@ public class Client {
 			if (verbose) System.out.println("received disconnect syste message");
 			disconnect(false);
 		} else {
-			if(systemMessage.containsPlayerID()){
+			if (systemMessage.containsPlayerID()) {
 				localPlayerInstance = new NetworkPlayer(systemMessage.getPlayerID());
 			}
 		}
@@ -244,7 +246,11 @@ public class Client {
 		if (TCPSocket == null || TCPSocket.isClosed()) {
 			throw new IllegalStateException("send() called when socket was not set up");
 		}
-		outStream.writeObject(packet);
+		// outStream.writeObject(packet); //saves a reference to every packet written (not good)
+		outStream.writeUnshared(packet); // doesn't save references
+		
+		outStream.reset();	//clear references
+
 	}
 
 	private boolean disconnect(boolean sendDisconnectMessage) {
@@ -252,7 +258,7 @@ public class Client {
 		if (sendDisconnectMessage) {
 			sendDisconnectSystemMessage();
 		}
-		//kill threads after the message to system has been sent
+		// kill threads after the message to system has been sent
 		threadsShouldLive = false;
 		localPlayerInstance = null;
 
@@ -275,8 +281,8 @@ public class Client {
 	 * A non-blocking disconnect.
 	 */
 	public void disconnect() {
-		if(!isRunning()) return;
-		
+		if (!isRunning()) return;
+
 		// launch disconnect in new thread to prevent blocking for user.
 		Thread disconnectThread = new Thread(new Runnable() {
 			public void run() {
@@ -319,7 +325,7 @@ public class Client {
 	// public boolean isConnected() {
 	// boolean tcpIsConnected = false;
 	// if (TCPSocket != null) {
-	// tcpIsConnected = TCPSocket.isClosed(); 
+	// tcpIsConnected = TCPSocket.isClosed();
 	// }
 	// return tcpIsConnected && inStream != null && outStream != null;
 	// }
@@ -398,8 +404,8 @@ public class Client {
 			}
 		}
 	}
-	
-	public NetworkPlayer getPlayerObject(){
+
+	public NetworkPlayer getPlayerObject() {
 		return this.localPlayerInstance;
 	}
 

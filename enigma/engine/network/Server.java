@@ -43,7 +43,7 @@ public class Server {
 	private ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean> sendBufferLocks = new ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean>();
 	private ConcurrentLinkedQueue<SocketMessagePair> socketsForSystemToDrop = new ConcurrentLinkedQueue<SocketMessagePair>();
 	private IDManager idManager;
-//	private Character hostID = null;
+	// private Character hostID = null;
 	private Character nextID = null;
 	private NetworkPlayer hostPlayer = null;
 
@@ -58,7 +58,7 @@ public class Server {
 	private int sendFailureThreshold = 100;
 	private long failureSleepMSTime = 50;
 	private boolean isRunning;
-	private boolean hasReceived;
+	private volatile boolean hasReceived;
 	/**
 	 * provides a storage place to lump all received packets for user processing. Non-concurrency is
 	 * intentional.
@@ -243,7 +243,9 @@ public class Server {
 		while (threadsShouldLive && threadShouldLive.get(fromSocket)) {
 			try {
 				ObjectInputStream inStream = inStreams.get(fromSocket);
-				Packet inbound = (Packet) inStream.readObject();
+				// Packet inbound = (Packet) inStream.readObject(); //saves a reference to packet
+				Packet inbound = (Packet) inStream.readUnshared(); // prevent saving reference
+				
 				if (!checkForSystemMessage(inbound, fromSocket) && inbound != null) {
 					receiveBuffers.get(fromSocket).add(inbound);
 					hasReceived = true;
@@ -275,13 +277,16 @@ public class Server {
 				// peek what is to be sent, rather than removing from queue
 				Packet toSend = sendBuffers.get(toSocket).peek();
 				if (toSend != null) {
-					outStreams.get(toSocket).writeObject(toSend);
+					// outStreams.get(toSocket).writeObject(toSend);
+					outStreams.get(toSocket).writeUnshared(toSend); //prevents stream from saving reference
 
-					// remove packet from buffer because exception was not
-					// thrown
+					// remove packet from buffer (exception not thrown)
 					sendBuffers.get(toSocket).poll();
+
+					// reset the output stream to remove references to packet
+					outStreams.get(toSocket).reset();  //un-needed with writeUnshared()?
 				} else {
-					//TODO maybe sleep 1ms here to prevent needless cycles from repeating
+					// TODO maybe sleep 1ms here to prevent needless cycles from repeating
 				}
 				sendFailures.put(toSocket, 0);
 			} catch (IOException e) {
@@ -662,17 +667,17 @@ public class Server {
 			}
 		}
 	}
-	
-	public NetworkPlayer getHostPlayerObj(){
+
+	public NetworkPlayer getHostPlayerObj() {
 		return hostPlayer;
 	}
-	
-	public void sendIDToClient(Socket socket, Character ID){
+
+	public void sendIDToClient(Socket socket, Character ID) {
 		SystemMessagePacket idPacket = new SystemMessagePacket();
 		idPacket.setPlayerID(ID);
-		
-		//this will block, but that shouldn't a problem since method is called during listening
-		sendBuffers.get(socket).add(idPacket);	
+
+		// this will block, but that shouldn't a problem since method is called during listening
+		sendBuffers.get(socket).add(idPacket);
 	}
 
 	/**

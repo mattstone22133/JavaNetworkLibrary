@@ -1,0 +1,74 @@
+_____________ OBJECT STREAMS CONTAINING REFERNCES TO PREVIOUS PACKETS __________________________
+__________________________________________________________________________________________________________
+
+*The problem of OBJECT STREAMS retaining references to deserialized/serialized objects*
+	https://docs.oracle.com/javase/7/docs/api/java/io/ObjectOutputStream.html
+	https://docs.oracle.com/javase/7/docs/api/java/io/ObjectInputStream.html
+
+		The objectStreams (input and output) save references to objects de-serialized through the stream. 
+	Saving references can be a problem for inbound and outbound packets; the heap space an run out of memory.
+	Some online forums (StackOverflow) suggest calling reset() methods after writeObjet and readObject. However,
+	this works for the output streams, it causes issues with the input streams. 
+	
+		Another approach is to use .writeUnshared() and .readUnshared(). These ***mostly*** do not store 
+	references to objects serialized/de-serialized. But, such behavior isn't guaranteed; there may be references stored.
+	However, I believe it is safe in the context of this program based on the java docs of ObjectInputStream and ObjectOutputStream.
+	
+	ObjectInputStream
+		From ObjectInputStream documentation:
+			 "
+			  Note that this in itself does not always guarantee that the reference returned by 
+			  readUnshared is unique; the deserialized object may define a readResolve method which
+			  returns an object visible to other parties, or readUnshared may return a Class object
+			  or enum constant obtainable elsewhere in the stream or through external means. 
+			  If the deserialized object defines a readResolve method and the invocation of 
+			  that method returns an array, then readUnshared returns a shallow clone of that 
+			  array; this guarantees that the returned array object is unique and cannot be obtained
+			   a second time from an invocation of readObject or readUnshared on the ObjectInputStream,
+			    even if the underlying data stream has been manipulated.
+			 "
+	I take this to mean that object references are NOT STORED UNLESS:
+		1. readResolve method is defined - an implementation of this method may create references externally
+		2. packet contains a .class - which shouldn't be a problem for networking
+		3. packet contains an array in the "readRsolve" method (shallow clone) - I do not plan on implementing read resolve.
+	Thus, I believe it is safe to avoid calling reset on the stream, however the problem of a large number of objects being
+	created still exists. 	
+	
+	ObjectOutputStream
+		From ObjectOutputStream documentation:
+			"Writes an "unshared" object to the ObjectOutputStream. This method is identical to 
+			 writeObject, except that it always writes the given object as a new, unique object in the
+			 stream (as opposed to a back-reference pointing to a previously serialized instance). 
+			 Specifically: An object written via writeUnshared is always serialized in the same manner as
+			 a newly appearing object (an object that has not been written to the stream yet), 
+			 regardless of whether or not the object has been written previously. If writeObject is used
+			 to write an object that has been previously written with writeUnshared, the previous
+			 writeUnshared operation is treated as if it were a write of a separate object. In other 
+			 words, ObjectOutputStream will never generate back-references to object data written by 
+			 calls to writeUnshared.
+			 
+			  While writing an object via writeUnshared does not in itself 
+			 guarantee a unique reference to the object when it is deserialized, it allows a single 
+			 object to be defined multiple times in a stream, so that multiple calls to readUnshared
+			 by the receiver will not conflict. Note that the rules described above only apply to the
+			 base-level object written with writeUnshared, and not to any transitively referenced
+			 sub-objects in the object graph to be serialized.ObjectOutputStream subclasses which
+			 override this method can only be constructed in security contexts possessing the 
+			 "enableSubclassImplementation" SerializablePermission; any attempt to instantiate 
+			 such a subclass without this permission will cause a SecurityException to be thrown."
+		I do not take this as a problem for counting references. However, being safe and calling reset()
+		after objects are written to stream does not cause tests to fail like the input stream does; So, 
+		reset() is called after writes to the stream.
+	
+_____________ LARGE NUMBER OF PACKETS TO GARBAGE COLLECT __________________________
+_______________________________________________________________________________________________________________________
+
+*PROBLEM OF A LARGE NUMBER OF PACKET OBJECTS BEING CREATED*
+	ESCAPE ANALYSIS - this may prevent the creation of objets in the java heap.
+		 http://docs.oracle.com/javase/7/docs/technotes/guides/vm/performance-enhancements-7.html#escapeAnalysis
+		 I am not sure that this applies to packets since they're generated concurrently and passed through many scopes.
+		 
+	Garbage Collector I hope (not currently tested 4/11/2017) will be able to handle the creation of a
+	 maximum of 60 packets per second * Max Players	(which is more than what is planned to be implemented).
+		
+	I believe references should be cleared and therefore GC-able based on the discussion of the problem above this section.
