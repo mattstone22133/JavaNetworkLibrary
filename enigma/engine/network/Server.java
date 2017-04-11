@@ -39,12 +39,13 @@ public class Server {
 	private ConcurrentHashMap<Socket, Integer> receiveFailures = new ConcurrentHashMap<Socket, Integer>();
 	private ConcurrentHashMap<Socket, Integer> sendFailures = new ConcurrentHashMap<Socket, Integer>();
 	private ConcurrentHashMap<Socket, Boolean> threadShouldLive = new ConcurrentHashMap<Socket, Boolean>();
-	private ConcurrentHashMap<Socket, Character> ID = new ConcurrentHashMap<Socket, Character>();
+	private ConcurrentHashMap<Socket, Character> socketToIDMap = new ConcurrentHashMap<Socket, Character>();
 	private ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean> sendBufferLocks = new ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean>();
 	private ConcurrentLinkedQueue<SocketMessagePair> socketsForSystemToDrop = new ConcurrentLinkedQueue<SocketMessagePair>();
 	private IDManager idManager;
-	private Character hostID = null;
+//	private Character hostID = null;
 	private Character nextID = null;
+	private NetworkPlayer hostPlayer = null;
 
 	private int port;
 	private short maxPlayers = 8;
@@ -76,7 +77,8 @@ public class Server {
 		setMaxPlayers(maxPlayers);
 		idManager = new IDManager(maxPlayers);
 		if (createPlayerForHost) {
-			hostID = idManager.getReservedIDAndRemoveFromIDPool();
+			Character hostID = idManager.getReservedIDAndRemoveFromIDPool();
+			this.hostPlayer = new NetworkPlayer(hostID);
 		}
 		// ready = true; //TODO remove this if decide against this logic approach
 	}
@@ -146,8 +148,7 @@ public class Server {
 
 			if (activeSockets < maxPlayers - 1 && nextID != null) {
 				try {
-					// listen for socket - timeout exception will occur if no connection (will loop
-					// back)
+					// listen for socket - timeout exception will occur to check if loop should end
 					final Socket newSocket = listener.accept();
 
 					// conduct all activity that will cause exceptions, before adding to hashmaps
@@ -174,10 +175,6 @@ public class Server {
 					receiveBuffers.put(newSocket, receiveBuffer);
 					sendBufferLocks.put(sendBuffer, false);
 
-					// handle ID creation (and set up for next)
-					ID.put(newSocket, nextID);
-					nextID = idManager.getReservedIDAndRemoveFromIDPool();
-
 					// init failure counts
 					sendFailures.put(newSocket, 0);
 					receiveFailures.put(newSocket, 0);
@@ -199,8 +196,14 @@ public class Server {
 					});
 					inThreads.put(newSocket, receiveThread);
 					receiveThread.start();
-					activeSockets++;
 
+					// handle ID creation (and set up for next)
+					socketToIDMap.put(newSocket, nextID);
+					sendIDToClient(newSocket, nextID);					
+					activeSockets++;
+					
+					//prepare ID for next round over loop.
+					nextID = idManager.getReservedIDAndRemoveFromIDPool();
 					// @formatter:on
 				} catch (SocketTimeoutException e) {
 					// timeout event is normal
@@ -277,6 +280,8 @@ public class Server {
 					// remove packet from buffer because exception was not
 					// thrown
 					sendBuffers.get(toSocket).poll();
+				} else {
+					//TODO maybe sleep 1ms here to prevent needless cycles from repeating
 				}
 				sendFailures.put(toSocket, 0);
 			} catch (IOException e) {
@@ -419,7 +424,7 @@ public class Server {
 			e.printStackTrace();
 			System.out.println("failed to close socket");
 		}
-		idManager.unReserveIDAndReturnIdToPool(ID.get(socket));
+		idManager.unReserveIDAndReturnIdToPool(socketToIDMap.get(socket));
 
 		// Threads are now dead - deallocate from most containers
 		sendFailures.remove(socket);
@@ -433,7 +438,7 @@ public class Server {
 		outThreads.remove(socket);
 		sockets.remove(socket);
 		sendBufferLocks.remove(socket);
-		ID.remove(socket);
+		socketToIDMap.remove(socket);
 		activeSockets--;
 
 		System.out.println("\tServer: dropped " + socketStr + extraMsgs);
@@ -656,6 +661,18 @@ public class Server {
 				}
 			}
 		}
+	}
+	
+	public NetworkPlayer getHostPlayerObj(){
+		return hostPlayer;
+	}
+	
+	public void sendIDToClient(Socket socket, Character ID){
+		SystemMessagePacket idPacket = new SystemMessagePacket();
+		idPacket.setPlayerID(ID);
+		
+		//this will block, but that shouldn't a problem since method is called during listening
+		sendBuffers.get(socket).add(idPacket);	
 	}
 
 	/**

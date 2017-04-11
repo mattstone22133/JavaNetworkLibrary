@@ -8,7 +8,7 @@ import enigma.engine.network.test.basictests.BasicTestConnect4_ClientSendServer5
 import enigma.engine.network.test.basictests.BasicTestConnect5_ServerSendClient5UniquePackets;
 import enigma.engine.network.test.client.blackbox.TestClientMethods;
 import enigma.engine.network.test.connect.disconnect.blackbox.TestBasicDisconnect1;
-import enigma.engine.network.test.idprovider.TestIDManager;
+import enigma.engine.network.test.id.TestIDManager;
 import enigma.engine.network.test.server.blackbox.TestServerPublicMethods;
 import enigma.engine.network.test.twowayconnection.BasicTwoWayTest2_Server5packet_client5packet;
 import enigma.engine.network.test.twowayconnection.BasicTwoWayTest5_BackAndForth_SingleThread;

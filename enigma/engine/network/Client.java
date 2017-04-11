@@ -398,5 +398,9 @@ public class Client {
 			}
 		}
 	}
+	
+	public NetworkPlayer getPlayerObject(){
+		return this.localPlayerInstance;
+	}
 
 }

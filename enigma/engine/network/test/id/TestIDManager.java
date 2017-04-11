@@ -1,4 +1,4 @@
-package enigma.engine.network.test.idprovider;
+package enigma.engine.network.test.id;
 
 import static org.junit.Assert.*;
 
