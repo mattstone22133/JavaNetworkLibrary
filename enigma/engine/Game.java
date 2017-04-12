@@ -18,6 +18,7 @@ import enigma.engine.data.compression.DataCompressor;
 import enigma.engine.gui.NetworkGameMenuPrototype;
 import enigma.engine.network.FailedToConnect;
 import enigma.engine.network.Network;
+import enigma.engine.network.NetworkPlayer;
 
 public class Game extends ApplicationAdapter implements InputProcessor {
 	/** Main camera of the game */
@@ -25,16 +26,16 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
 	private SpriteBatch batch;
 	private Actor controlTarget;
+	private Actor otherActor = null;
 	private DrawableString title;
 
 	private NetworkGameMenuPrototype networkMenu;
 	private boolean drawNetworkMenu = false;
-	private Network network = new Network();;
-
-	private
+	private Network network = new Network();
+	private NetworkPlayer idObject = null;
 
 	// touch events
-	Vector3 convertedCoords;
+	private Vector3 convertedCoords;
 
 	@Override
 	public void create() {
@@ -73,6 +74,9 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 		if (controlTarget != null) {
 			controlTarget.draw(batch);
 		}
+		if (otherActor != null) {
+			otherActor.draw(batch);
+		}
 
 		if (title != null) {
 			title.draw(batch);
@@ -104,6 +108,10 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 			controlTarget.handleLogic();
 		}
 
+		if (otherActor != null) {
+			otherActor.handleLogic();
+		}
+
 		networkLogic();
 
 	}
@@ -112,6 +120,25 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 		pollNetworkMenu();
 		receiveData();
 		sendData();
+		pollIdRequest();
+	}
+
+	private void pollIdRequest() {
+		// a better implementation should be used for polling, this is just a proof of concept.
+		if (idObject == null && network.isRunning()) {
+			idObject = network.getPlayerID();
+			if (idObject != null) {
+				if (network.inServerMode()) {
+					controlTarget.setId(idObject.getID());
+					otherActor = new Actor();
+				} else {
+					// client mode
+					otherActor = controlTarget;
+					controlTarget = new Actor();
+					controlTarget.setId(idObject.getID());
+				}
+			}
+		}
 	}
 
 	private void receiveData() {
@@ -124,8 +151,17 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 				shouldStop = true;
 			} else {
 				for (DataCompressor actor : packet.actorsAdded) {
-					// this should use a hash map and look up actors based on ID
-					controlTarget.updateToData((ActorData)actor);
+					// ugly decompression - this is just for a proof of concept.
+					ActorData actorData = (ActorData) actor;
+					if (idObject != null) {
+						if (actorData.networkId == idObject.getID()) {
+							controlTarget.updateToData(actorData);
+						} else if (otherActor != null) {
+							otherActor.updateToData(actorData);
+						}
+					} else {
+						controlTarget.updateToData(actorData);
+					}
 				}
 			}
 		}
@@ -134,10 +170,8 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 
 	private void sendData() {
 		if (network.sendDelayTimerExpired() && network.isRunning()) {
-			if (network.inServerMode()) {
-				GameDataPacket packetToSend = makePacket();
-				network.queueToSend(packetToSend);
-			}
+			GameDataPacket packetToSend = makePacket();
+			network.queueToSend(packetToSend);
 		}
 	}
 
