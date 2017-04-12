@@ -174,6 +174,23 @@ public class Network {
 		return false;
 	}
 
+	/**
+	 * Get the ID object that the server provided
+	 * 
+	 * @return an instance of an ID object if the server/client has been granted one or null if the
+	 *         server/client hasn't been granted an id OR the id hasn't yet reached the client.
+	 */
+	public NetworkPlayer getPlayerID() {
+		if (isRunning()) {
+			if (isServer) {
+				return server.getHostPlayerObj();
+			} else {
+				return client.getPlayerObject();
+			}
+		}
+		return null;
+	}
+
 	public void serverMode() {
 		isServer = true;
 	}

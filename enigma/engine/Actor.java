@@ -17,6 +17,7 @@ public class Actor {
 	private float angleSpeed;
 	private float rotation;
 	private Vector3 mousConvtVect = new Vector3();
+	private Character networkID = null;
 
 	/**
 	 * Basic constructor that creates an actor with an underlying sprite.
@@ -148,13 +149,21 @@ public class Actor {
 	}
 
 	public ActorData getCompresedData() {
-		return new ActorData(id, rotation, sprite.getX(), sprite.getY());
+		return new ActorData(id, rotation, sprite.getX(), sprite.getY(), networkID);
 	}
 
 	public void updateToData(ActorData actor) {
 		this.sprite.setX(actor.x);
 		this.sprite.setY(actor.y);
 		this.sprite.setRotation(actor.rotation);
+	}
+
+	public void setId(char id) {
+		this.networkID = new Character(id);
+	}
+	
+	public Character getID(){
+		return this.networkID;
 	}
 
 }
