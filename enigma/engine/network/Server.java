@@ -6,12 +6,10 @@ import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.LinkedList;
-import java.util.Scanner;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -708,54 +706,4 @@ public class Server {
 		return activeSockets;
 	}
 
-	public static void main(String[] args) throws UnknownHostException, InterruptedException {
-		final Server server = new Server(25565);
-
-		// Start the server running
-		new Thread(new Runnable() {
-			public void run() {
-				System.out.println("Starting Server Up");
-				try {
-					server.run();
-				} catch (IOException e) {
-					System.out.println("Failed to start server listening for connections");
-					e.printStackTrace();
-				}
-			}
-		}).start();
-
-		// Creating a delay before starting the un-packaging.
-		while (server.isRunning()) {
-			Thread.sleep(1000);
-		}
-
-		// Start a thread to print messages from the server (independent of this
-		// thread)
-		new Thread(new Runnable() {
-			public void run() {
-				System.out.println("Starting staging and unpackaging phases");
-				while (server.isRunning()) {
-					if (server.hasReceivedPacket()) {
-						server.stageReceivedPacketsForRemoval();
-						while (server.hasStagedPackets()) {
-							DemoConcretePacket packet = (DemoConcretePacket) server.getNextStagedPacket();
-							// here is where you would use your defined packet
-							// to extra data
-							packet.printData();
-						}
-					}
-				}
-			}
-		}).start();
-
-		// note: above thread's prints may stop printing to eclipse terminal,
-		// drop breakpnt to
-		// restore
-		Thread.sleep(10000);
-		System.out.println("Close the server by pressing enter");
-		Scanner kb = new Scanner(System.in);
-		kb.nextLine();
-		kb.close();
-		server.disconnect();
-	}
 }

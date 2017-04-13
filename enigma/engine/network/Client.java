@@ -362,10 +362,11 @@ public class Client {
 		}
 	}
 
-	private void sleepThread(int ms) {
+	private void sleepThread(long ms) {
 		try {
-			Thread.sleep(sendSleepDelay);
+			Thread.sleep(ms);
 		} catch (InterruptedException e) {
+			System.out.println("SLEEP FAIL IN CLIENT");
 		}
 	}
 
@@ -392,26 +393,6 @@ public class Client {
 
 	public Packet getNextReceivedPacket() {
 		return receiveBuffer.poll();
-	}
-
-	public static void main(String[] args) throws UnknownHostException {
-		Client client = new Client();
-		try {
-			client.connect(InetAddress.getLocalHost().getHostAddress(), 25565);
-		} catch (FailedToConnect e1) {
-			System.out.println("Could not connect");
-			return;
-		}
-		DemoConcretePacket test = new DemoConcretePacket(12, 0, 0, 45);
-		while (true) {
-			try {
-				Thread.sleep(5000);
-				client.queueToSend(test);
-
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
 	}
 
 	public NetworkPlayer getPlayerObject() {
