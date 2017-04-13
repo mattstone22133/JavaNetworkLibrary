@@ -129,6 +129,7 @@ public class TestBasicDisconnect1 {
 			fail("failed to connect client");
 		}
 
+		TestTools.sleepForMS(100);
 		cntNum = server.activeConnections();
 		client.disconnect();
 		TestTools.sleepForMS(1000);
@@ -146,6 +147,9 @@ public class TestBasicDisconnect1 {
 
 	@Test
 	public void testServerNotifiesClientOfUpcomingDisconnect() throws IOException, FailedToConnect {
+		//TODO: this test occasionally fails because a client doesn't register as disconnect
+		//investigate why - or if it still is occurring after further implementation is done
+		
 		// create the 5 clients
 		Client client1 = client;
 		client.verbose = true;
@@ -186,7 +190,7 @@ public class TestBasicDisconnect1 {
 
 		// give clients 1 second to receive and act on disconnect system message
 		long start = System.currentTimeMillis();
-		long delayMS = 1500;
+		long delayMS = 2000;
 		while ((client1.isRunning() || client2.isRunning() || client3.isRunning() || client4.isRunning() || client5.isRunning()) && System.currentTimeMillis() - start < delayMS) {
 			TestTools.sleepForMS(1);
 		}

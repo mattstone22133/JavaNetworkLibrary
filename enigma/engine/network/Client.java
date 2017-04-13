@@ -140,11 +140,14 @@ public class Client {
 		while (threadsShouldLive) {
 			try {
 				// Packet inbound = (Packet) inStream.readObject(); //saves reference to packet
-				Packet inbound = (Packet) inStream.readUnshared();  //doesn't save ref to packet
-				
+				Packet inbound = (Packet) inStream.readUnshared(); // doesn't save ref to packet
+
 				if (!checkForSystemMessage(inbound) && inbound != null) {
 					// not a system message, add the packet to buffer
 					receiveBuffer.add(inbound);
+				} else {
+					// avoid busy waiting
+					// sleepThread(1); //TODO (note)this cause wait if system msg!
 				}
 
 			} catch (ClassNotFoundException e) {
@@ -178,6 +181,9 @@ public class Client {
 						sendFailures = 0;
 					}
 				}
+			} else {
+				// avoid busy waiting
+				sleepThread(1);
 			}
 		}
 	}
@@ -248,8 +254,8 @@ public class Client {
 		}
 		// outStream.writeObject(packet); //saves a reference to every packet written (not good)
 		outStream.writeUnshared(packet); // doesn't save references
-		
-		outStream.reset();	//clear references
+
+		outStream.reset(); // clear references
 
 	}
 
@@ -349,6 +355,9 @@ public class Client {
 			if (stageForSendBuffer.peek() != null && !sendBufferLock) {
 				Packet toSend = stageForSendBuffer.poll();
 				sendBuffer.add(toSend);
+			} else {
+				// stop busy waiting
+				 sleepThread(1);
 			}
 		}
 	}

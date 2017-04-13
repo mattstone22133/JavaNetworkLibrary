@@ -200,7 +200,7 @@ public class Server {
 					// handle ID creation (and set up for next)
 					socketToIDMap.put(newSocket, nextID);
 					sendIDToClient(newSocket, nextID);					
-					activeSockets++;
+					activeSockets++;	//TODO AtomicInteger safer for disconnects(use disconnectTests)
 					
 					//prepare ID for next round over loop.
 					nextID = idManager.getReservedIDAndRemoveFromIDPool();
@@ -216,6 +216,7 @@ public class Server {
 					}
 				}
 			} else {
+				// avoid busy waiting
 				sleepForMS(1);
 			}
 		}
@@ -235,7 +236,8 @@ public class Server {
 					// if it fails to send for a set threshold
 				}
 			}
-			sleepForMS(1000); // TODO remove this when implemented.
+			// avoid busy waiting
+			sleepForMS(1000); // TODO control this through a field?
 		}
 	}
 
@@ -245,7 +247,7 @@ public class Server {
 				ObjectInputStream inStream = inStreams.get(fromSocket);
 				// Packet inbound = (Packet) inStream.readObject(); //saves a reference to packet
 				Packet inbound = (Packet) inStream.readUnshared(); // prevent saving reference
-				
+
 				if (!checkForSystemMessage(inbound, fromSocket) && inbound != null) {
 					receiveBuffers.get(fromSocket).add(inbound);
 					hasReceived = true;
@@ -278,15 +280,16 @@ public class Server {
 				Packet toSend = sendBuffers.get(toSocket).peek();
 				if (toSend != null) {
 					// outStreams.get(toSocket).writeObject(toSend);
-					outStreams.get(toSocket).writeUnshared(toSend); //prevents stream from saving reference
+					outStreams.get(toSocket).writeUnshared(toSend); // doesn't save reference
 
 					// remove packet from buffer (exception not thrown)
 					sendBuffers.get(toSocket).poll();
 
 					// reset the output stream to remove references to packet
-					outStreams.get(toSocket).reset();  //un-needed with writeUnshared()?
+					outStreams.get(toSocket).reset(); // un-needed with writeUnshared()?
 				} else {
-					// TODO maybe sleep 1ms here to prevent needless cycles from repeating
+					// avoid busy waiting
+					sleepForMS(1);
 				}
 				sendFailures.put(toSocket, 0);
 			} catch (IOException e) {
@@ -361,7 +364,7 @@ public class Server {
 			if (pair != null && pair.socket != null) {
 				dropConnection(pair.socket, pair.dropMessage);
 			} else {
-				// sleep thread
+				// sleep thread (prevent busy waiting)
 				sleepForMS(10);
 			}
 		}
@@ -429,7 +432,11 @@ public class Server {
 			e.printStackTrace();
 			System.out.println("failed to close socket");
 		}
-		idManager.unReserveIDAndReturnIdToPool(socketToIDMap.get(socket));
+
+		Character id = socketToIDMap.get(socket);
+		if (id != null) {
+			idManager.unReserveIDAndReturnIdToPool(id);
+		}
 
 		// Threads are now dead - deallocate from most containers
 		sendFailures.remove(socket);
@@ -444,7 +451,7 @@ public class Server {
 		sockets.remove(socket);
 		sendBufferLocks.remove(socket);
 		socketToIDMap.remove(socket);
-		activeSockets--;
+		activeSockets--;// TODO atomic integer is safer, use disconnectTests
 
 		System.out.println("\tServer: dropped " + socketStr + extraMsgs);
 	}
@@ -664,6 +671,9 @@ public class Server {
 						buffer.add(packet.makeCopy());
 					}
 				}
+			} else {
+				// avoid busy waiting
+				sleepForMS(1);
 			}
 		}
 	}
