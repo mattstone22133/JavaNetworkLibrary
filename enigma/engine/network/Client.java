@@ -3,7 +3,6 @@ package enigma.engine.network;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
@@ -33,7 +32,6 @@ public class Client {
 
 	private volatile boolean threadsShouldLive = true;
 	private int blockingTimeoutMS = 1000;
-	private int sendSleepDelay;
 	public boolean verbose = false;
 
 	private NetworkPlayer localPlayerInstance = null;
