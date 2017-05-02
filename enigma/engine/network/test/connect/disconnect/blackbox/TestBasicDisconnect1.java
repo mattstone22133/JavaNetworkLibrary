@@ -157,7 +157,13 @@ public class TestBasicDisconnect1 {
 		Client client3 = new Client();
 		Client client4 = new Client();
 		Client client5 = new Client();
-
+		
+		client2.verbose = true;
+		client3.verbose = true;
+		client4.verbose = true;
+		client5.verbose = true;
+		
+		
 		// start the server
 		server.disconnect();
 		while (server.isRunning()) {
@@ -182,6 +188,9 @@ public class TestBasicDisconnect1 {
 		int connectedClient = server.activeConnections();
 		assertEquals("server doesn't state 5 connected clients, instead", 5, connectedClient);
 
+		
+		System.out.println("\n\n\nDisconnecting server\n\n\n\n\n\n\n\n\n\n");
+		
 		// disconnect server and see if clients disconnect due to a server disconnect message
 		server.disconnect();
 
@@ -190,7 +199,7 @@ public class TestBasicDisconnect1 {
 
 		// give clients 1 second to receive and act on disconnect system message
 		long start = System.currentTimeMillis();
-		long delayMS = 2000;
+		long delayMS = 7500;
 		while ((client1.isRunning() || client2.isRunning() || client3.isRunning() || client4.isRunning() || client5.isRunning()) && System.currentTimeMillis() - start < delayMS) {
 			TestTools.sleepForMS(1);
 		}
@@ -209,11 +218,11 @@ public class TestBasicDisconnect1 {
 		client4.disconnect();
 		client5.disconnect();
 		
-		assertTrue("client 1 still running after ~1.5sec and disconnect", client1Disconnected);
-		assertTrue("client 2 still running after ~1.5sec and disconnect", client2Disconnected);
-		assertTrue("client 3 still running after ~1.5sec and disconnect", client3Disconnected);
-		assertTrue("client 4 still running after ~1.5sec and disconnect", client4Disconnected);
-		assertTrue("client 5 still running after ~1.5sec and disconnect", client5Disconnected);
+		assertTrue("client 1 still running after ~7.5sec and disconnect", client1Disconnected);
+		assertTrue("client 2 still running after ~7.5sec and disconnect", client2Disconnected);
+		assertTrue("client 3 still running after ~7.5sec and disconnect", client3Disconnected);
+		assertTrue("client 4 still running after ~7.5sec and disconnect", client4Disconnected);
+		assertTrue("client 5 still running after ~7.5sec and disconnect", client5Disconnected);
 
 		client1.verbose = false;
 	}

@@ -21,11 +21,15 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  *
  */
 public class Server {
+	private int port;
+	private short maxPlayers = 8;
+	private int blockingTimeoutMS = 1000;
+	private long socketAliveCheckTimeoutMS = 30000;
 	private ServerSocket listener;
 	private Thread listeningThread;
 	private Thread socketValidationThread;
 	private Thread systemMsgThread;
-	private ConcurrentHashMap<Integer, Socket> sockets = new ConcurrentHashMap<Integer, Socket>();
+	private ConcurrentHashMap<Integer, Socket> sockets = new ConcurrentHashMap<Integer, Socket>(maxPlayers);
 	private volatile int activeSockets = 0; // This value has potential to be concurrent bottleneck
 	private ConcurrentHashMap<Socket, Thread> outThreads = new ConcurrentHashMap<Socket, Thread>();
 	private ConcurrentHashMap<Socket, Thread> inThreads = new ConcurrentHashMap<Socket, Thread>();
@@ -45,10 +49,6 @@ public class Server {
 	private Character nextID = null;
 	private NetworkPlayer hostPlayer = null;
 
-	private int port;
-	private short maxPlayers = 8;
-	private int blockingTimeoutMS = 1000;
-	private long socketAliveCheckTimeoutMS = 30000;
 
 	private volatile boolean threadsShouldLive = true;
 	private volatile boolean listenForceShutdown = false;
@@ -356,11 +356,12 @@ public class Server {
 	private void SystemMessageHandlerThreadMethod() {
 		while (threadsShouldLive) {
 			// since ConcurrentQueue.size() is O(n), just poll and check if non-null head
-			SocketMessagePair pair = socketsForSystemToDrop.poll();
+			SocketMessagePair pair = socketsForSystemToDrop.peek();
 
 			// Socket dropSocket = socketsForSystemToDrop.poll();
 			if (pair != null && pair.socket != null) {
 				dropConnection(pair.socket, pair.dropMessage);
+				socketsForSystemToDrop.poll();
 			} else {
 				// sleep thread (prevent busy waiting)
 				sleepForMS(10);
