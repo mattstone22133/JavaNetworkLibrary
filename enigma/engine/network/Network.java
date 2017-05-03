@@ -7,31 +7,31 @@ import java.net.UnknownHostException;
 /**
  * Creates objects which encapsulate network behavior. A network object can act as a server or a
  * client. A user does not need to concern with how a connection is set up, only what data needs to
- * be sent.
+ * be sent.<p><p>
  * 
- * Basic API version 0.8:
+ * <h3><u>Basic API version 0.8:</u></h3><p>
  * 
- * 1. Setting a network object as a server or client: A user simply needs to create a network object
- * and call serverMode() or clientMode() to behave as such.
+ * <strong>1. Setting a network object as a server or client:</strong> A user simply needs to create a network object
+ * and call serverMode() or clientMode() to behave as such.<p>
  * 
- * 2. Sending data: A user needs to create a packet class that extends the Packet.java interface.
+ * <strong>2. Creating packets to send:</strong> A user needs to create a packet class that extends the Packet.java interface.
  * The Packet interface uses basic java serialization to send data over a network. As long as
  * objects you create support such serialization, then they can be sent in a packet. However, it is
  * probably a good idea to instead define a data containing class that only sends absolutely
  * necessary information over the network. To improve performance even further, the serialization
  * methods can be overloaded to provide specific serialization implementation details in your
- * extended packet class.
+ * extended packet class.<p>
  * 
- * 3. Hosting a server: It is up to the user to define how data is processed, but the network
+ * <strong>3. Hosting a server:</strong> It is up to the user to define how data is processed, but the network
  * activity of a server is encapsulated in the network object. First, the user needs to set the
  * network object to the serverMode() by calling the serverMode() method. Next, the user needs to
  * start the server running; the user can do this by calling the run() method. If the server fails
  * to start running, an exception will be thrown before the call to run() completes. Note, the run()
  * method is non-blocking and therefore the server may not start running immediately. To determine
  * when the server starts, the user can call isRunning() on the network. When isRunning() returns
- * true, the user can send data over the network.
+ * true, the user can send data over the network.<p>
  * 
- * 4. Connecting as a client: The user needs to set the Network object to client mode by calling the
+ * <strong>4. Connecting as a client:</strong> The user needs to set the Network object to client mode by calling the
  * clientMode() method. This configures the network object to connect to server, rather than host a
  * server. If the user did not set the address and port in the constructor, then the user should set
  * the address of the server and port of the server using the setAddress(String address) and
@@ -40,29 +40,29 @@ import java.net.UnknownHostException;
  * successfully, run() will simply return; if it fails, then run() will throw a FailedToConnect()
  * exception. The run() method call is non-blocking, and therefore the Network object may not have
  * connected immediately after run() returns. The user may poll() the network object to determine if
- * it is connected by using the isRunning() method call.f
+ * it is connected by using the isRunning() method call.<p>
  * 
- * 5. Sending data as a server: The user can queue packets to send using the queueToSend(Packet
+ * <strong>5. Sending data as a server:</strong> The user can queue packets to send using the queueToSend(Packet
  * packet) method. This copies the packet and broadcasts it to ALL clients currently connected to
  * the server. Currently, there is no method for sending data to an individual user. If a user wants
  * to send data to a specific client, then the user should use the provided Network ID system
- * discussed later.
+ * discussed later.<p>
  * 
- * 6. Sending data as a client: The user queues packets in the same way as the server -- ie by
+ * <strong>6. Sending data as a client:</strong> The user queues packets in the same way as the server -- ie by
  * calling the queueToSend(Packet packet) method. However, when a client send data, only the server
  * receives the packet. It is up t the user to write code that makes the server extract data,
- * process it, update its game world, and then broadcast the new world to all clients.
+ * process it, update its game world, and then broadcast the new world to all clients.<p>
  * 
- * 7. Sending data at an appropriate frequency: So, how often should you send data? That is up to
+ * <strong>7. Sending data at an appropriate frequency:</strong> So, how often should you send data? That is up to
  * you but the network object provides some assistance with tracking when to send data. The
  * setSendDataDelay(long delayMS) allows the user to define an amount of time between each packet
  * send, ie the sendDelay. This delay IS NOT enforced by the server. Instead, it is up to the user
  * to poll the network object if the delay has expired with sendDelayTimerExpired() which returns
  * true when the enough time has passed for the user to send data. Since this timer is not enforced,
  * the user can send multiple packets back to back if needed - each of which will reset the timer
- * and send immediately.
+ * and send immediately.<p>
  * 
- * 8. Receiving Data as a Server or a Client: The network object hasReceivedPacket() method returns
+ * <strong>8. Receiving Data as a Server or a Client:</strong> The network object hasReceivedPacket() method returns
  * true when it has buffered a packet that the user needs to extract. When a user is ready to
  * receive a packet, it should call this method to determine if the server has a packet to receive.
  * The user can retrieve a received packet by calling getNextPacket() which returns a raw packet
@@ -72,14 +72,14 @@ import java.net.UnknownHostException;
  * hasReceivedPacket(), the user can simply call getNextPacket() which returns null when there is no
  * buffered packet. By default, the network transmits data over a TCP connection, therefore any
  * packet sent will be received at some point in time and the user should not concern their self
- * with sending duplicate packets.
+ * with sending duplicate packets.<p>
  * 
- * 9. Disconnecting clients and server: The user simply needs to call disconnect() on the network
+ * <strong>9. Disconnecting clients and server:</strong> The user simply needs to call disconnect() on the network
  * object. currently this method DOEs block, but will probably be changed in the future. please
  * consult the javadoc for the method for updates on behavior. Disconnecting a client simply leaves
  * the server. However, disconnecting a server network object shuts down the server and deallocates
  * buffers. A disconnect message is sent to all clients that were connected to the server, which
- * causes clients to be disconnected.
+ * causes clients to be disconnected.<p>
  * 
  * 
  * @author Matt Stone
