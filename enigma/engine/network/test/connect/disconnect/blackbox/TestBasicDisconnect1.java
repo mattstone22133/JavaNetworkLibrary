@@ -147,9 +147,9 @@ public class TestBasicDisconnect1 {
 
 	@Test
 	public void testServerNotifiesClientOfUpcomingDisconnect() throws IOException, FailedToConnect {
-		//TODO: this test occasionally fails because a client doesn't register as disconnect
-		//investigate why - or if it still is occurring after further implementation is done
-		
+		// TODO: this test occasionally fails because a client doesn't register as disconnect
+		// investigate why - or if it still is occurring after further implementation is done
+
 		// create the 5 clients
 		Client client1 = client;
 		client.verbose = true;
@@ -157,13 +157,12 @@ public class TestBasicDisconnect1 {
 		Client client3 = new Client();
 		Client client4 = new Client();
 		Client client5 = new Client();
-		
+
 		client2.verbose = true;
 		client3.verbose = true;
 		client4.verbose = true;
 		client5.verbose = true;
-		
-		
+
 		// start the server
 		server.disconnect();
 		while (server.isRunning()) {
@@ -188,9 +187,8 @@ public class TestBasicDisconnect1 {
 		int connectedClient = server.activeConnections();
 		assertEquals("server doesn't state 5 connected clients, instead", 5, connectedClient);
 
-		
 		System.out.println("\n\n\nDisconnecting server\n\n\n\n\n\n\n\n\n\n");
-		
+
 		// disconnect server and see if clients disconnect due to a server disconnect message
 		server.disconnect();
 
@@ -203,21 +201,21 @@ public class TestBasicDisconnect1 {
 		while ((client1.isRunning() || client2.isRunning() || client3.isRunning() || client4.isRunning() || client5.isRunning()) && System.currentTimeMillis() - start < delayMS) {
 			TestTools.sleepForMS(1);
 		}
-		
-		//capture the current state of each client
+
+		// capture the current state of each client
 		boolean client1Disconnected = !client1.isRunning();
 		boolean client2Disconnected = !client2.isRunning();
 		boolean client3Disconnected = !client3.isRunning();
 		boolean client4Disconnected = !client4.isRunning();
 		boolean client5Disconnected = !client5.isRunning();
-		
-		//disconnect clients in case test fails, otherwise next test will throw exception.
+
+		// disconnect clients in case test fails, otherwise next test will throw exception.
 		client1.disconnect();
 		client2.disconnect();
 		client3.disconnect();
 		client4.disconnect();
 		client5.disconnect();
-		
+
 		assertTrue("client 1 still running after ~7.5sec and disconnect", client1Disconnected);
 		assertTrue("client 2 still running after ~7.5sec and disconnect", client2Disconnected);
 		assertTrue("client 3 still running after ~7.5sec and disconnect", client3Disconnected);
@@ -225,6 +223,7 @@ public class TestBasicDisconnect1 {
 		assertTrue("client 5 still running after ~7.5sec and disconnect", client5Disconnected);
 
 		client1.verbose = false;
+
 	}
 
 	@Test
@@ -235,6 +234,7 @@ public class TestBasicDisconnect1 {
 
 	public void connect5() throws FailedToConnect, IOException {
 		// create the 5 clients
+		Server server = TestBasicDisconnect1.server;
 		Client client1 = client;
 		Client client2 = new Client();
 		Client client3 = new Client();
@@ -274,11 +274,6 @@ public class TestBasicDisconnect1 {
 		client5.queueToSend(new DemoConcretePacket(5, 0, 0, 0));
 		System.out.println("5 packets sent");
 
-		// test that server has registered 5 connections
-		makeServerWaitForNumConnections(5, 1000);
-		int connectedClient = server.activeConnections();
-		assertEquals("server doesn't state 5 connected clients, instead", 5, connectedClient);
-
 		int counter = 0;
 		Long start = System.currentTimeMillis();
 		while (server.hasReceivedPacket() || counter < 5) {
@@ -292,6 +287,11 @@ public class TestBasicDisconnect1 {
 			}
 		}
 		System.out.printf("received all 5 packets after: %dms\n", System.currentTimeMillis() - start);
+
+		// test that server has registered 5 connections
+		makeServerWaitForNumConnections(5, 1000);
+		int connectedClient = server.activeConnections();
+		assertEquals("server doesn't state 5 connected clients, instead", 5, connectedClient);
 
 		// test that all packets were received and reset the variables back to false
 		for (int i = 0; i < receivedPackets.length; ++i) {
@@ -333,6 +333,12 @@ public class TestBasicDisconnect1 {
 		int servConnections = server.activeConnections();
 
 		assertEquals(String.format("Server had %d connections, not 0", servConnections), 0, servConnections);
+
+		// long delayMS = 1000;
+		// start = System.currentTimeMillis();
+		// while(server.isRunning() && System.currentTimeMillis() - start < delayMS){
+		// TestTools.sleepForMS(10);
+		// }
 	}
 
 	public void makeServerWaitForNumConnections(int number, int delayMS) {

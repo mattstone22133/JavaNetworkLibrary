@@ -22,6 +22,10 @@ public class Network {
 	private long lastSendInMS = 0;
 	public boolean verbose = false;
 
+	/**
+	 * Construct a basic network object. The address, port, and send delay need to be specified
+	 * before attempting to establish any connections. 
+	 */
 	public Network() {
 		this(null, 25565, 50);
 	}

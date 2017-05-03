@@ -9,9 +9,11 @@ import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This class handles the server aspect of the application.
@@ -30,7 +32,9 @@ public class Server {
 	private Thread socketValidationThread;
 	private Thread systemMsgThread;
 	private ConcurrentHashMap<Integer, Socket> sockets = new ConcurrentHashMap<Integer, Socket>(maxPlayers);
-	private volatile int activeSockets = 0; // This value has potential to be concurrent bottleneck
+	// private volatile int activeSockets = 0; // This value has potential to be concurrent
+	// bottleneck
+	private AtomicInteger activeSockets = new AtomicInteger(0);
 	private ConcurrentHashMap<Socket, Thread> outThreads = new ConcurrentHashMap<Socket, Thread>();
 	private ConcurrentHashMap<Socket, Thread> inThreads = new ConcurrentHashMap<Socket, Thread>();
 	private Thread stagingSendThread;
@@ -48,7 +52,6 @@ public class Server {
 	// private Character hostID = null;
 	private Character nextID = null;
 	private NetworkPlayer hostPlayer = null;
-
 
 	private volatile boolean threadsShouldLive = true;
 	private volatile boolean listenForceShutdown = false;
@@ -100,6 +103,8 @@ public class Server {
 			return;
 		}
 
+		// init();
+
 		threadsShouldLive = true;
 		listener = new ServerSocket(port); // throws IOException
 		listener.setSoTimeout(blockingTimeoutMS); // throws IOException
@@ -137,6 +142,32 @@ public class Server {
 		isRunning = true;
 	}
 
+	private void init() {
+		sockets = new ConcurrentHashMap<Integer, Socket>(maxPlayers);
+		activeSockets = new AtomicInteger(0);
+		outThreads = new ConcurrentHashMap<Socket, Thread>();
+		inThreads = new ConcurrentHashMap<Socket, Thread>();
+		inStreams = new ConcurrentHashMap<Socket, ObjectInputStream>();
+		outStreams = new ConcurrentHashMap<Socket, ObjectOutputStream>();
+		sendBuffers = new ConcurrentHashMap<>();
+		receiveBuffers = new ConcurrentHashMap<>();
+		receiveFailures = new ConcurrentHashMap<Socket, Integer>();
+		sendFailures = new ConcurrentHashMap<Socket, Integer>();
+		threadShouldLive = new ConcurrentHashMap<Socket, Boolean>();
+		socketToIDMap = new ConcurrentHashMap<Socket, Character>();
+		sendBufferLocks = new ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean>();
+		socketsForSystemToDrop = new ConcurrentLinkedQueue<SocketMessagePair>();
+		nextID = null;
+		hostPlayer = null;
+		threadsShouldLive = true;
+		listenForceShutdown = false;
+		sendFailureThreshold = 100;
+		failureSleepMSTime = 50;
+		stagedReceivePackets = new LinkedList<Packet>();
+		stagedSendPackets = new ConcurrentLinkedQueue<Packet>();
+		pingSocketsPeriodically = false;
+	}
+
 	private void listen() {
 		while (threadsShouldLive && !listener.isClosed()) {
 			if (nextID == null) {
@@ -144,7 +175,7 @@ public class Server {
 				nextID = idManager.getReservedIDAndRemoveFromIDPool();
 			}
 
-			if (activeSockets < maxPlayers - 1 && nextID != null) {
+			if (activeSockets.intValue() < maxPlayers - 1 && nextID != null) {
 				try {
 					// listen for socket - timeout exception will occur to check if loop should end
 					final Socket newSocket = listener.accept();
@@ -198,7 +229,8 @@ public class Server {
 					// handle ID creation (and set up for next)
 					socketToIDMap.put(newSocket, nextID);
 					sendIDToClient(newSocket, nextID);					
-					activeSockets++;	//TODO AtomicInteger safer for disconnects(use disconnectTests)
+					//activeSockets++;	//TODO AtomicInteger safer for disconnects(use disconnectTests)
+					activeSockets.incrementAndGet();
 					
 					//prepare ID for next round over loop.
 					nextID = idManager.getReservedIDAndRemoveFromIDPool();
@@ -401,7 +433,13 @@ public class Server {
 	private void dropConnection(Socket socket, boolean sendDisconnectMessage) {
 		String socketStr = socket.toString();
 		String extraMsgs = " ";
-		System.out.println("Server: dropping connection " + socketStr);
+
+		// check that socket isn't currently directed
+		if (!threadsAliveFor(socket)) {
+			System.out.println("Server Warning: disconnect called on already disconnected socket.");
+			return;
+		}
+		System.out.println("Server: dropping connection " + socketStr + " " + socket.hashCode());
 
 		// send disconnect message - blocks for max 5 seconds before moving on
 		if (sendDisconnectMessage) {
@@ -450,7 +488,8 @@ public class Server {
 		sockets.remove(socket);
 		sendBufferLocks.remove(socket);
 		socketToIDMap.remove(socket);
-		activeSockets--;// TODO atomic integer is safer, use disconnectTests
+		// activeSockets--;// TODO atomic integer is safer, use disconnectTests
+		activeSockets.decrementAndGet();
 
 		System.out.println("\tServer: dropped " + socketStr + extraMsgs);
 	}
@@ -538,10 +577,10 @@ public class Server {
 
 		// TODO finish developing this
 		// threadsShouldLive = false;
-		for (Socket socket : sockets.values()) {
-			// socketsForSystemToDrop.add(socket);
+		for (Socket socket : sockets.values()) { // TODO 98% sure values() gives stale value
 			socketsForSystemToDrop.add(new SocketMessagePair(socket, true));
 		}
+
 		try {
 			// below is a flag to prevent listen thread for printing exception msg
 			listenForceShutdown = true;
@@ -704,7 +743,7 @@ public class Server {
 		//
 		// My implementation requires a valid size, so I have created my own atomic variable to
 		// track size
-		return activeSockets;
+		return activeSockets.intValue();
 	}
 
 }
