@@ -1,0 +1,20 @@
+	private boolean ready = false;
+	private boolean closeAllThreads = false;
+	
+	
+	private void resetAllStateVariables() {
+		// TODO still need to clean up hash maps
+		threadsShouldLive = true;
+	}
+		
+	private boolean allThreadsClosed() {
+		boolean oneIsAlive = false;
+		oneIsAlive |= listeningThread.isAlive();
+		for (Socket socket : sockets.values()) {
+			oneIsAlive |= outThreads.get(socket).isAlive();
+			oneIsAlive |= inThreads.get(socket).isAlive();
+		}
+
+		// return true only when no thread was detected to be alive!
+		return !oneIsAlive;
+	}
