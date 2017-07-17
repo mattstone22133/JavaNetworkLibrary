@@ -141,31 +141,31 @@ public class Server {
 		isRunning = true;
 	}
 
-	private void init() {
-		sockets = new ConcurrentHashMap<Integer, Socket>(maxPlayers);
-		activeSockets = new AtomicInteger(0);
-		outThreads = new ConcurrentHashMap<Socket, Thread>();
-		inThreads = new ConcurrentHashMap<Socket, Thread>();
-		inStreams = new ConcurrentHashMap<Socket, ObjectInputStream>();
-		outStreams = new ConcurrentHashMap<Socket, ObjectOutputStream>();
-		sendBuffers = new ConcurrentHashMap<>();
-		receiveBuffers = new ConcurrentHashMap<>();
-		receiveFailures = new ConcurrentHashMap<Socket, Integer>();
-		sendFailures = new ConcurrentHashMap<Socket, Integer>();
-		threadShouldLive = new ConcurrentHashMap<Socket, Boolean>();
-		socketToIDMap = new ConcurrentHashMap<Socket, Character>();
-		sendBufferLocks = new ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean>();
-		socketsForSystemToDrop = new ConcurrentLinkedQueue<SocketMessagePair>();
-		nextID = null;
-		hostPlayer = null;
-		threadsShouldLive = true;
-		listenForceShutdown = false;
-		sendFailureThreshold = 100;
-		failureSleepMSTime = 50;
-		stagedReceivePackets = new LinkedList<Packet>();
-		stagedSendPackets = new ConcurrentLinkedQueue<Packet>();
-		pingSocketsPeriodically = false;
-	}
+	// private void init() {
+	// sockets = new ConcurrentHashMap<Integer, Socket>(maxPlayers);
+	// activeSockets = new AtomicInteger(0);
+	// outThreads = new ConcurrentHashMap<Socket, Thread>();
+	// inThreads = new ConcurrentHashMap<Socket, Thread>();
+	// inStreams = new ConcurrentHashMap<Socket, ObjectInputStream>();
+	// outStreams = new ConcurrentHashMap<Socket, ObjectOutputStream>();
+	// sendBuffers = new ConcurrentHashMap<>();
+	// receiveBuffers = new ConcurrentHashMap<>();
+	// receiveFailures = new ConcurrentHashMap<Socket, Integer>();
+	// sendFailures = new ConcurrentHashMap<Socket, Integer>();
+	// threadShouldLive = new ConcurrentHashMap<Socket, Boolean>();
+	// socketToIDMap = new ConcurrentHashMap<Socket, Character>();
+	// sendBufferLocks = new ConcurrentHashMap<ConcurrentLinkedQueue<Packet>, Boolean>();
+	// socketsForSystemToDrop = new ConcurrentLinkedQueue<SocketMessagePair>();
+	// nextID = null;
+	// hostPlayer = null;
+	// threadsShouldLive = true;
+	// listenForceShutdown = false;
+	// sendFailureThreshold = 100;
+	// failureSleepMSTime = 50;
+	// stagedReceivePackets = new LinkedList<Packet>();
+	// stagedSendPackets = new ConcurrentLinkedQueue<Packet>();
+	// pingSocketsPeriodically = false;
+	// }
 
 	private void listen() {
 		while (threadsShouldLive && !listener.isClosed()) {

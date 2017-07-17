@@ -24,16 +24,21 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 	/** Main camera of the game */
 	private OrthographicCamera camera;
 
+	/** Render Items */
 	private SpriteBatch batch;
 	private Actor controlTarget;
 	private Actor otherActor = null;
 	private DrawableString title;
 
+	/** Logical Items*/
 	private NetworkGameMenuPrototype networkMenu;
 	private boolean drawNetworkMenu = false;
 	private Network network = new Network();
 	private NetworkPlayer idObject = null;
 
+	/** Flags */
+	boolean bClickToWalk = true;
+	
 	// touch events
 	private Vector3 convertedCoords;
 
@@ -270,7 +275,17 @@ public class Game extends ApplicationAdapter implements InputProcessor {
 	public boolean touchDown(int screenX, int screenY, int pointer, int button) {
 		mouseCordsToGameCords(camera, convertedCoords);
 		networkMenu.isTouched(convertedCoords);
+		if(bClickToWalk){
+			walkControlToPoint(convertedCoords);
+		}
+		
 		return false;
+	}
+
+	private void walkControlToPoint(Vector3 point) {
+		if(controlTarget != null){
+			controlTarget.setInterpPnt(point);
+		}
 	}
 
 	@Override
